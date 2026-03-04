@@ -4,6 +4,28 @@
   position: relative;
 }
 
+/* Board Selector */
+.board-selector {
+  padding: 6px 10px;
+  background: #1e2a38;
+  color: #e0e0e0;
+  border: 1px solid #3d5a73;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.board-selector:hover:not(:disabled) {
+  border-color: #007acc;
+}
+
+.board-selector:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Add Component Button */
 .add-component-btn {
   padding: 8px 16px;
