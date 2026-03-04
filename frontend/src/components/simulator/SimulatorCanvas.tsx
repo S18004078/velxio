@@ -303,6 +303,20 @@ export const SimulatorCanvas = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [wireInProgress, cancelWireCreation]);
 
+  // Recalculate wire positions when components change (e.g., when loading an example)
+  useEffect(() => {
+    // Wait for components to render and pinInfo to be available
+    // Use multiple retries to ensure pinInfo is ready
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
+    // Try at 100ms, 300ms, and 500ms to ensure all components have rendered
+    timers.push(setTimeout(() => recalculateAllWirePositions(), 100));
+    timers.push(setTimeout(() => recalculateAllWirePositions(), 300));
+    timers.push(setTimeout(() => recalculateAllWirePositions(), 500));
+
+    return () => timers.forEach(t => clearTimeout(t));
+  }, [components, recalculateAllWirePositions]);
+
   // Render component using dynamic renderer
   const renderComponent = (component: any) => {
     const metadata = registry.getById(component.metadataId);
@@ -325,21 +339,29 @@ export const SimulatorCanvas = () => {
           y={component.y}
           isSelected={isSelected}
           onMouseDown={(e) => {
-            handleComponentMouseDown(component.id, e);
+            // Only handle UI events when simulation is NOT running
+            if (!running) {
+              handleComponentMouseDown(component.id, e);
+            }
           }}
           onDoubleClick={(e) => {
-            handleComponentDoubleClick(component.id, e);
+            // Only handle UI events when simulation is NOT running
+            if (!running) {
+              handleComponentDoubleClick(component.id, e);
+            }
           }}
         />
 
-        {/* Pin overlay for wire creation */}
-        <PinOverlay
-          componentId={component.id}
-          componentX={component.x}
-          componentY={component.y}
-          onPinClick={handlePinClick}
-          showPins={showPinsForComponent}
-        />
+        {/* Pin overlay for wire creation - hide when running */}
+        {!running && (
+          <PinOverlay
+            componentId={component.id}
+            componentX={component.x}
+            componentY={component.y}
+            onPinClick={handlePinClick}
+            showPins={showPinsForComponent}
+          />
+        )}
       </React.Fragment>
     );
   };

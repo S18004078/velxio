@@ -202,7 +202,7 @@ void loop() {
       {
         id: 'wire-button',
         start: { componentId: 'arduino-uno', pinName: '2' },
-        end: { componentId: 'button-1', pinName: '1.L' },
+        end: { componentId: 'button-1', pinName: '1.l' },
         color: '#00aaff',
       },
       {
@@ -570,25 +570,25 @@ void loop() {
       {
         id: 'wire-button-red',
         start: { componentId: 'arduino-uno', pinName: '2' },
-        end: { componentId: 'button-red', pinName: '1.L' },
+        end: { componentId: 'button-red', pinName: '1.l' },
         color: '#00aaff',
       },
       {
         id: 'wire-button-green',
         start: { componentId: 'arduino-uno', pinName: '3' },
-        end: { componentId: 'button-green', pinName: '1.L' },
+        end: { componentId: 'button-green', pinName: '1.l' },
         color: '#00aaff',
       },
       {
         id: 'wire-button-blue',
         start: { componentId: 'arduino-uno', pinName: '4' },
-        end: { componentId: 'button-blue', pinName: '1.L' },
+        end: { componentId: 'button-blue', pinName: '1.l' },
         color: '#00aaff',
       },
       {
         id: 'wire-button-yellow',
         start: { componentId: 'arduino-uno', pinName: '5' },
-        end: { componentId: 'button-yellow', pinName: '1.L' },
+        end: { componentId: 'button-yellow', pinName: '1.l' },
         color: '#00aaff',
       },
     ],

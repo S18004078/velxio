@@ -48,6 +48,11 @@ export const DynamicComponent: React.FC<DynamicComponentProps> = ({
   const mountedRef = useRef(false);
 
   const handleComponentEvent = useSimulatorStore((s) => s.handleComponentEvent);
+  const running = useSimulatorStore((s) => s.running);
+
+  // Check if component is interactive (has simulation logic with attachEvents)
+  const logic = PartSimulationRegistry.get(metadata.id || id.split('-')[0]);
+  const isInteractive = logic?.attachEvents !== undefined;
 
   /**
    * Sync React properties to Web Component
@@ -179,11 +184,8 @@ export const DynamicComponent: React.FC<DynamicComponentProps> = ({
 
     const logic = PartSimulationRegistry.get(metadata.id || id.split('-')[0]); // Fallback if id is like led-1
 
-    console.log(`[DynamicComponent] Component ${id} (${metadata.id}): Logic found =`, !!logic);
-
     let cleanupSimulationEvents: (() => void) | undefined;
     if (logic && logic.attachEvents) {
-      console.log(`[DynamicComponent] Attaching events for ${id} (${metadata.id})`);
       // We need AVRSimulator instance. We can grab it from store.
       const simulator = useSimulatorStore.getState().simulator;
       if (simulator) {
@@ -225,7 +227,7 @@ export const DynamicComponent: React.FC<DynamicComponentProps> = ({
         position: 'absolute',
         left: `${x}px`,
         top: `${y}px`,
-        cursor: 'move',
+        cursor: running && isInteractive ? 'pointer' : 'move',
         border: isSelected ? '2px dashed #007acc' : '2px solid transparent',
         borderRadius: '4px',
         padding: '4px',

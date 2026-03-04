@@ -367,6 +367,7 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => {
     // Recalculate all wire positions from actual DOM pinInfo
     recalculateAllWirePositions: () => {
       const state = get();
+
       const updatedWires = state.wires.map((wire) => {
         const updated = { ...wire };
         const startComp = state.components.find((c) => c.id === wire.start.componentId);

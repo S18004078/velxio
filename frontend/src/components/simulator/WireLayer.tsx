@@ -3,15 +3,35 @@
  *
  * SVG layer that renders all wires below components.
  * Positioned absolutely with full canvas coverage.
+ *
+ * Features:
+ * - Automatic offset calculation for overlapping wires
+ * - Visual separation of parallel wires
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useSimulatorStore } from '../../store/useSimulatorStore';
 import { WireRenderer } from './WireRenderer';
 import { WireInProgressRenderer } from './WireInProgressRenderer';
+import { calculateWireOffsets, applyOffsetToWire } from '../../utils/wireOffsetCalculator';
 
 export const WireLayer: React.FC = () => {
   const { wires, wireInProgress, selectedWireId } = useSimulatorStore();
+
+  // Calculate automatic offsets for overlapping wires
+  const wireOffsets = useMemo(() => {
+    return calculateWireOffsets(wires);
+  }, [wires]);
+
+  // Apply offsets to wires for rendering
+  // Priority: manual offset > automatic offset > 0
+  const offsetWires = useMemo(() => {
+    return wires.map(wire => {
+      const automaticOffset = wireOffsets.get(wire.id) || 0;
+      const finalOffset = wire.manualOffset !== undefined ? wire.manualOffset : automaticOffset;
+      return applyOffsetToWire(wire, finalOffset);
+    });
+  }, [wires, wireOffsets]);
 
   return (
     <svg
@@ -34,8 +54,8 @@ export const WireLayer: React.FC = () => {
         style={{ pointerEvents: 'none' }}
       />
 
-      {/* Render all wires */}
-      {wires.map((wire) => (
+      {/* Render all wires with automatic offsets */}
+      {offsetWires.map((wire, index) => (
         <WireRenderer
           key={wire.id}
           wire={wire}

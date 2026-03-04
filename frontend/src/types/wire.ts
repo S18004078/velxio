@@ -28,6 +28,9 @@ export interface Wire {
   // Visual properties
   color: string;        // Computed from signal type
 
+  // Automatic offset management (for overlapping wires)
+  manualOffset?: number;  // User-defined offset (overrides automatic calculation)
+
   // Metadata
   signalType: WireSignalType | null;  // For validation and coloring
   isValid: boolean;     // Connection validation result (Phase 3)
