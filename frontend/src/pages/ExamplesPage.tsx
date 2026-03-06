@@ -14,23 +14,27 @@ import type { ExampleProject } from '../data/examples';
 export const ExamplesPage: React.FC = () => {
   const navigate = useNavigate();
   const { setCode } = useEditorStore();
-  const { setComponents, setWires } = useSimulatorStore();
+  const { setComponents, setWires, setBoardType } = useSimulatorStore();
 
   const handleLoadExample = (example: ExampleProject) => {
     console.log('Loading example:', example.title);
 
+    // Switch board type if the example specifies one
+    const targetBoard = example.boardType || 'arduino-uno';
+    setBoardType(targetBoard);
+
     // Load the code into the editor
     setCode(example.code);
 
-    // Filter out Arduino component from examples (it's rendered separately in SimulatorCanvas)
-    const componentsWithoutArduino = example.components.filter(
-      (comp) => !comp.type.includes('arduino')
+    // Filter out board components from examples (board is rendered separately in SimulatorCanvas)
+    const componentsWithoutBoard = example.components.filter(
+      (comp) => !comp.type.includes('arduino') && !comp.type.includes('pico')
     );
 
     // Load components into the simulator
     // Convert component type to metadataId (e.g., 'wokwi-led' -> 'led')
     setComponents(
-      componentsWithoutArduino.map((comp) => ({
+      componentsWithoutBoard.map((comp) => ({
         id: comp.id,
         metadataId: comp.type.replace('wokwi-', ''),
         x: comp.x,

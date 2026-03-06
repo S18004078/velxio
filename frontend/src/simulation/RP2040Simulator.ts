@@ -1,25 +1,45 @@
-import { RP2040, GPIOPinState } from 'rp2040js';
+import { RP2040, GPIOPinState, ConsoleLogger, LogLevel } from 'rp2040js';
+import type { RPI2C } from 'rp2040js';
 import { PinManager } from './PinManager';
+import { bootromB1 } from './rp2040-bootrom';
 
 /**
  * RP2040Simulator — Emulates Raspberry Pi Pico (RP2040) using rp2040js
  *
  * Features:
- * - ARM Cortex-M0+ CPU emulation at 125 MHz
- * - 30 GPIO pins (GPIO0-GPIO29)
- * - ADC on GPIO26-GPIO29 (A0-A3)
+ * - ARM Cortex-M0+ dual-core Cortex-M0+ CPU at 125 MHz (single-core emulated)
+ * - 30 GPIO pins (GPIO0-GPIO29)  xc fv       nn 
+ * - 2× UART, 2× SPI, 2× I2C
+ * - ADC on GPIO26-GPIO29 (A0-A3) + internal temp sensor (ch4)
+ * - PWM on any GPIO
  * - LED_BUILTIN on GPIO25
+ * - Full bootrom B1 for proper boot sequence
  *
  * Arduino-pico pin mapping (Earle Philhower's core):
  *   D0  = GPIO0   … D29 = GPIO29
  *   A0  = GPIO26  … A3  = GPIO29
  *   LED_BUILTIN = GPIO25
+ *   Default Serial  → UART0 (GPIO0=TX, GPIO1=RX)
+ *   Default I2C     → I2C0  (GPIO4=SDA, GPIO5=SCL)
+ *   Default SPI     → SPI0  (GPIO16=MISO, GPIO19=MOSI, GPIO18=SCK, GPIO17=CS)
  */
 
 const F_CPU = 125_000_000; // 125 MHz
 const CYCLE_NANOS = 1e9 / F_CPU; // nanoseconds per cycle (~8 ns)
 const FPS = 60;
 const CYCLES_PER_FRAME = Math.floor(F_CPU / FPS); // ~2 083 333
+
+/** Virtual I2C device interface for RP2040 */
+export interface RP2040I2CDevice {
+  /** 7-bit I2C address */
+  address: number;
+  /** Called when master writes a byte */
+  writeByte(value: number): boolean;   // return true for ACK
+  /** Called when master reads a byte */
+  readByte(): number;
+  /** Optional: called on STOP condition */
+  stop?(): void;
+}
 
 export class RP2040Simulator {
   private rp2040: RP2040 | null = null;
@@ -28,6 +48,14 @@ export class RP2040Simulator {
   public pinManager: PinManager;
   private speed = 1.0;
   private gpioUnsubscribers: Array<() => void> = [];
+  private flashCopy: Uint8Array | null = null;
+
+  /** Serial output callback — fires for each byte the Pico sends on UART0 */
+  public onSerialData: ((char: string) => void) | null = null;
+
+  /** I2C virtual devices on each bus */
+  private i2cDevices: [Map<number, RP2040I2CDevice>, Map<number, RP2040I2CDevice>] = [new Map(), new Map()];
+  private activeI2CDevice: [RP2040I2CDevice | null, RP2040I2CDevice | null] = [null, null];
 
   constructor(pinManager: PinManager) {
     this.pinManager = pinManager;
@@ -47,19 +75,14 @@ export class RP2040Simulator {
     }
 
     console.log(`[RP2040] Binary size: ${bytes.length} bytes`);
+    this.flashCopy = bytes;
 
-    this.rp2040 = new RP2040();
-
-    // Load binary into flash starting at offset 0 (maps to 0x10000000)
-    this.rp2040.flash.set(bytes, 0);
-
-    // Set up GPIO listeners
-    this.setupGpioListeners();
-
-    console.log('[RP2040] CPU initialized, GPIO listeners attached');
+    this.initMCU(bytes);
+    console.log('[RP2040] CPU initialized with bootrom, UART, I2C, SPI, GPIO');
   }
 
   /** Same interface as AVRSimulator for store compatibility */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   loadHex(_hexContent: string): void {
     console.warn('[RP2040] loadHex() called on RP2040Simulator — use loadBinary() instead');
   }
@@ -67,6 +90,115 @@ export class RP2040Simulator {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getADC(): any {
     return this.rp2040?.adc ?? null;
+  }
+
+  /** Get underlying RP2040 instance (for advanced usage / tests) */
+  getMCU(): RP2040 | null {
+    return this.rp2040;
+  }
+
+  // ── Private initialization ───────────────────────────────────────────────
+
+  private initMCU(programBytes: Uint8Array): void {
+    this.rp2040 = new RP2040();
+
+    // Suppress noisy internal logs (only show errors)
+    this.rp2040.logger = new ConsoleLogger(LogLevel.Error);
+
+    // Load RP2040 B1 bootrom — needed for proper boot sequence
+    this.rp2040.loadBootrom(bootromB1);
+
+    // Load binary into flash starting at offset 0 (maps to 0x10000000)
+    this.rp2040.flash.set(programBytes, 0);
+
+    // Set PC to flash start (boot vector)
+    this.rp2040.core.PC = 0x10000000;
+
+    // ── Wire UART0 (default Serial port for Arduino-Pico) ────────────
+    this.rp2040.uart[0].onByte = (value: number) => {
+      if (this.onSerialData) {
+        this.onSerialData(String.fromCharCode(value));
+      }
+    };
+
+    // ── Wire UART1 (Serial1) — also forward to onSerialData for now ──
+    this.rp2040.uart[1].onByte = (value: number) => {
+      if (this.onSerialData) {
+        this.onSerialData(String.fromCharCode(value));
+      }
+    };
+
+    // ── Wire I2C0 and I2C1 ───────────────────────────────────────────
+    this.wireI2C(0);
+    this.wireI2C(1);
+
+    // ── Wire SPI0 and SPI1 — default loopback ────────────────────────
+    this.rp2040.spi[0].onTransmit = (value: number) => {
+      this.rp2040!.spi[0].completeTransmit(value); // loopback
+    };
+    this.rp2040.spi[1].onTransmit = (value: number) => {
+      this.rp2040!.spi[1].completeTransmit(value); // loopback
+    };
+
+    // ── Set default ADC values ───────────────────────────────────────
+    // Channel 0-3: GPIO26-29, channel 4: internal temp sensor
+    // Default to mid-range (~1.65V on 3.3V ref, 12-bit)
+    this.rp2040.adc.channelValues[0] = 2048;
+    this.rp2040.adc.channelValues[1] = 2048;
+    this.rp2040.adc.channelValues[2] = 2048;
+    this.rp2040.adc.channelValues[3] = 2048;
+    // Internal temp sensor: T = 27 - (V - 0.706) / 0.001721
+    // For 27°C: V = 0.706V → ADC = 0.706/3.3 * 4095 ≈ 876
+    this.rp2040.adc.channelValues[4] = 876;
+
+    // ── Set up GPIO listeners ────────────────────────────────────────
+    this.setupGpioListeners();
+  }
+
+  private wireI2C(bus: 0 | 1): void {
+    if (!this.rp2040) return;
+    const i2c: RPI2C = this.rp2040.i2c[bus];
+    const devices = this.i2cDevices[bus];
+    i2c.onStart = () => {
+      i2c.completeStart();
+    };
+
+    i2c.onConnect = (address: number) => {
+      const device = devices.get(address);
+      if (device) {
+        this.activeI2CDevice[bus] = device;
+        i2c.completeConnect(true); // ACK
+      } else {
+        this.activeI2CDevice[bus] = null;
+        i2c.completeConnect(false); // NACK
+      }
+    };
+
+    i2c.onWriteByte = (value: number) => {
+      const dev = this.activeI2CDevice[bus];
+      if (dev) {
+        const ack = dev.writeByte(value);
+        i2c.completeWrite(ack);
+      } else {
+        i2c.completeWrite(false);
+      }
+    };
+
+    i2c.onReadByte = () => {
+      const dev = this.activeI2CDevice[bus];
+      if (dev) {
+        i2c.completeRead(dev.readByte());
+      } else {
+        i2c.completeRead(0xff);
+      }
+    };
+
+    i2c.onStop = () => {
+      const dev = this.activeI2CDevice[bus];
+      if (dev?.stop) dev.stop();
+      this.activeI2CDevice[bus] = null;
+      i2c.completeStop();
+    };
   }
 
   private setupGpioListeners(): void {
@@ -80,13 +212,15 @@ export class RP2040Simulator {
       const gpio = this.rp2040.gpio[gpioIdx];
       if (!gpio) continue;
 
-      const unsub = gpio.addListener((state: GPIOPinState, _oldState: GPIOPinState) => {
+      const unsub = gpio.addListener((state: GPIOPinState) => {
         const isHigh = state === GPIOPinState.High;
         this.pinManager.triggerPinChange(pin, isHigh);
       });
       this.gpioUnsubscribers.push(unsub);
     }
   }
+
+  // ── Public API ───────────────────────────────────────────────────────────
 
   start(): void {
     if (this.running || !this.rp2040) {
@@ -98,12 +232,11 @@ export class RP2040Simulator {
     console.log('[RP2040] Starting simulation at 125 MHz...');
 
     let frameCount = 0;
-    const execute = (_timestamp: number) => {
+    const execute = () => {
       if (!this.running || !this.rp2040) return;
 
       const cyclesTarget = Math.floor(CYCLES_PER_FRAME * this.speed);
       const { core } = this.rp2040;
-      // Access the internal clock — rp2040js attaches it to the RP2040 instance
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const clock = (this.rp2040 as any).clock;
 
@@ -113,6 +246,7 @@ export class RP2040Simulator {
           if (core.waiting) {
             if (clock) {
               const jump: number = clock.nanosToNextAlarm;
+              if (jump <= 0) break; // no pending alarms
               clock.tick(jump);
               cyclesDone += Math.ceil(jump / CYCLE_NANOS);
             } else {
@@ -153,11 +287,10 @@ export class RP2040Simulator {
 
   reset(): void {
     this.stop();
-    if (this.rp2040) {
-      const flashCopy = new Uint8Array(this.rp2040.flash);
-      this.rp2040 = new RP2040();
-      this.rp2040.flash.set(flashCopy, 0);
-      this.setupGpioListeners();
+    if (this.rp2040 && this.flashCopy) {
+      this.initMCU(this.flashCopy);
+      // Re-register any previously added I2C devices
+      // (devices are kept in i2cDevices maps which persist across reset)
       console.log('[RP2040] CPU reset');
     }
   }
@@ -170,6 +303,10 @@ export class RP2040Simulator {
     this.speed = Math.max(0.1, Math.min(10.0, speed));
   }
 
+  getSpeed(): number {
+    return this.speed;
+  }
+
   /**
    * Drive a GPIO pin externally (e.g. from a button or slider).
    * GPIO n = Arduino D(n) for Raspberry Pi Pico.
@@ -180,5 +317,54 @@ export class RP2040Simulator {
     if (gpio) {
       gpio.setInputValue(state);
     }
+  }
+
+  /**
+   * Send text to UART0 RX (as if typed in Serial Monitor).
+   */
+  serialWrite(text: string): void {
+    if (!this.rp2040) return;
+    for (let i = 0; i < text.length; i++) {
+      this.rp2040.uart[0].feedByte(text.charCodeAt(i));
+    }
+  }
+
+  /**
+   * Register a virtual I2C device on the specified bus (0 or 1).
+   * Default bus 0 = Wire, bus 1 = Wire1.
+   */
+  addI2CDevice(device: RP2040I2CDevice, bus: 0 | 1 = 0): void {
+    this.i2cDevices[bus].set(device.address, device);
+  }
+
+  /**
+   * Remove an I2C device by address.
+   */
+  removeI2CDevice(address: number, bus: 0 | 1 = 0): void {
+    this.i2cDevices[bus].delete(address);
+  }
+
+  /**
+   * Set ADC channel value (0-4095 for 12-bit).
+   * Channels 0-3 = GPIO26-29, channel 4 = internal temperature sensor.
+   */
+  setADCValue(channel: number, value: number): void {
+    if (!this.rp2040) return;
+    if (channel >= 0 && channel < 5) {
+      this.rp2040.adc.channelValues[channel] = Math.max(0, Math.min(4095, value));
+    }
+  }
+
+  /**
+   * Set SPI onTransmit handler for a bus (0 or 1).
+   * callback receives TX byte and must call completeTransmit on the SPI instance.
+   */
+  setSPIHandler(bus: 0 | 1, handler: (value: number) => number): void {
+    if (!this.rp2040) return;
+    const spi = this.rp2040.spi[bus];
+    spi.onTransmit = (value: number) => {
+      const response = handler(value);
+      spi.completeTransmit(response);
+    };
   }
 }

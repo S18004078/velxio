@@ -212,6 +212,18 @@ export const ExamplesGallery: React.FC<ExamplesGalleryProps> = ({ onLoadExample 
                 <span className="example-category">
                   {getCategoryIcon(example.category)} {example.category}
                 </span>
+                {example.boardType === 'raspberry-pi-pico' && (
+                  <span className="example-board-badge" style={{
+                    backgroundColor: '#e91e8c',
+                    color: '#fff',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    fontSize: '0.7rem',
+                    fontWeight: 600,
+                  }}>
+                    Pico
+                  </span>
+                )}
               </div>
             </div>
           </div>

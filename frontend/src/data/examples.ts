@@ -10,6 +10,8 @@ export interface ExampleProject {
   description: string;
   category: 'basics' | 'sensors' | 'displays' | 'communication' | 'games' | 'robotics';
   difficulty: 'beginner' | 'intermediate' | 'advanced';
+  /** Target board — defaults to 'arduino-uno' if omitted */
+  boardType?: 'arduino-uno' | 'raspberry-pi-pico';
   code: string;
   components: Array<{
     type: string;
@@ -1349,6 +1351,611 @@ void loop() {
       { type: 'wokwi-arduino-uno', id: 'arduino-uno', x: 100, y: 100, properties: {} },
     ],
     wires: [],
+  },
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Raspberry Pi Pico (RP2040) Examples
+  // ──────────────────────────────────────────────────────────────────────────
+
+  {
+    id: 'pico-blink',
+    title: '[Pico] Blink LED',
+    description: 'Classic blink example on Raspberry Pi Pico — GPIO25 built-in LED',
+    category: 'basics',
+    difficulty: 'beginner',
+    boardType: 'raspberry-pi-pico',
+    code: `// Raspberry Pi Pico — Blink LED
+// Toggles the onboard LED on GPIO 25
+
+void setup() {
+  pinMode(LED_BUILTIN, OUTPUT); // GPIO 25
+  Serial.begin(115200);
+  Serial.println("Pico Blink Example");
+}
+
+void loop() {
+  digitalWrite(LED_BUILTIN, HIGH);
+  Serial.println("LED ON");
+  delay(500);
+
+  digitalWrite(LED_BUILTIN, LOW);
+  Serial.println("LED OFF");
+  delay(500);
+}
+`,
+    components: [
+      { type: 'wokwi-led', id: 'led-blink', x: 400, y: 120, properties: { color: 'green' } },
+      { type: 'wokwi-resistor', id: 'r1', x: 400, y: 200, properties: { resistance: '220' } },
+    ],
+    wires: [
+      { id: 'w1', start: { componentId: 'nano-rp2040', pinName: 'D2' }, end: { componentId: 'led-blink', pinName: 'A' }, color: '#00cc00' },
+      { id: 'w2', start: { componentId: 'led-blink', pinName: 'C' }, end: { componentId: 'r1', pinName: '1' }, color: '#999999' },
+    ],
+  },
+
+  {
+    id: 'pico-serial-echo',
+    title: '[Pico] Serial Echo',
+    description: 'Echo serial input back with a timestamp — tests UART on RP2040',
+    category: 'communication',
+    difficulty: 'beginner',
+    boardType: 'raspberry-pi-pico',
+    code: `// Raspberry Pi Pico — Serial Echo Test
+// Echoes received characters and prints a heartbeat every 2 seconds
+
+void setup() {
+  Serial.begin(115200);
+  delay(500);
+  Serial.println("=== Pico Serial Echo ===");
+  Serial.println("Type something and press Enter.");
+  Serial.println();
+}
+
+unsigned long lastHeartbeat = 0;
+
+void loop() {
+  // Echo any incoming characters
+  while (Serial.available()) {
+    char c = Serial.read();
+    Serial.print("Echo: ");
+    Serial.println(c);
+  }
+
+  // Heartbeat every 2 seconds
+  if (millis() - lastHeartbeat >= 2000) {
+    lastHeartbeat = millis();
+    Serial.print("[Heartbeat] Uptime: ");
+    Serial.print(millis() / 1000);
+    Serial.println("s");
+  }
+}
+`,
+    components: [
+      { type: 'wokwi-led', id: 'led-rx', x: 400, y: 120, properties: { color: 'yellow' } },
+    ],
+    wires: [
+      { id: 'w1', start: { componentId: 'nano-rp2040', pinName: 'TX' }, end: { componentId: 'led-rx', pinName: 'A' }, color: '#ff8800' },
+    ],
+  },
+
+  {
+    id: 'pico-serial-led-control',
+    title: '[Pico] Serial LED Control',
+    description: 'Control the Pico LED via serial commands (1=ON, 0=OFF, ?=status)',
+    category: 'communication',
+    difficulty: 'beginner',
+    boardType: 'raspberry-pi-pico',
+    code: `// Raspberry Pi Pico — Serial LED Control
+// Send '1' to turn LED ON, '0' to turn OFF, '?' for status
+
+void setup() {
+  pinMode(LED_BUILTIN, OUTPUT);
+  Serial.begin(115200);
+  delay(500);
+  Serial.println("=== Pico LED Control ===");
+  Serial.println("Commands: 1=ON  0=OFF  ?=status");
+}
+
+void loop() {
+  if (Serial.available()) {
+    char cmd = Serial.read();
+    switch (cmd) {
+      case '1':
+        digitalWrite(LED_BUILTIN, HIGH);
+        Serial.println("LED: ON");
+        break;
+      case '0':
+        digitalWrite(LED_BUILTIN, LOW);
+        Serial.println("LED: OFF");
+        break;
+      case '?':
+        Serial.print("LED: ");
+        Serial.println(digitalRead(LED_BUILTIN) ? "ON" : "OFF");
+        break;
+      default:
+        if (cmd >= ' ') {
+          Serial.print("Unknown command: ");
+          Serial.println(cmd);
+        }
+        break;
+    }
+  }
+}
+`,
+    components: [
+      { type: 'wokwi-led', id: 'led-status', x: 400, y: 120, properties: { color: 'green' } },
+      { type: 'wokwi-resistor', id: 'r1', x: 400, y: 200, properties: { resistance: '220' } },
+    ],
+    wires: [
+      { id: 'w1', start: { componentId: 'nano-rp2040', pinName: 'D2' }, end: { componentId: 'led-status', pinName: 'A' }, color: '#00cc00' },
+      { id: 'w2', start: { componentId: 'led-status', pinName: 'C' }, end: { componentId: 'r1', pinName: '1' }, color: '#999999' },
+    ],
+  },
+
+  {
+    id: 'pico-i2c-scanner',
+    title: '[Pico] I2C Scanner',
+    description: 'Scan the I2C bus on the Pico for connected devices',
+    category: 'communication',
+    difficulty: 'intermediate',
+    boardType: 'raspberry-pi-pico',
+    code: `// Raspberry Pi Pico — I2C Scanner
+// Scans I2C bus (Wire / I2C0: SDA=GP4, SCL=GP5) for devices
+
+#include <Wire.h>
+
+void setup() {
+  Serial.begin(115200);
+  delay(500);
+  Wire.begin(); // SDA=GP4, SCL=GP5 by default on Pico
+  Serial.println("=== Pico I2C Scanner ===");
+  Serial.println("Default I2C0: SDA=GP4, SCL=GP5");
+  Serial.println();
+}
+
+void loop() {
+  Serial.println("Scanning I2C bus...");
+  int found = 0;
+
+  for (byte addr = 1; addr < 127; addr++) {
+    Wire.beginTransmission(addr);
+    byte error = Wire.endTransmission();
+
+    if (error == 0) {
+      found++;
+      Serial.print("  Device found at 0x");
+      if (addr < 16) Serial.print("0");
+      Serial.print(addr, HEX);
+
+      // Identify known addresses
+      switch (addr) {
+        case 0x48: Serial.print(" (Temperature sensor)"); break;
+        case 0x50: Serial.print(" (EEPROM)"); break;
+        case 0x68: Serial.print(" (DS1307 RTC)"); break;
+        case 0x27: Serial.print(" (LCD backpack)"); break;
+        case 0x3C: Serial.print(" (SSD1306 OLED)"); break;
+        default: break;
+      }
+      Serial.println();
+    }
+  }
+
+  Serial.print("Scan complete. Found ");
+  Serial.print(found);
+  Serial.println(" device(s).");
+  Serial.println();
+  delay(5000);
+}
+`,
+    components: [
+      { type: 'wokwi-led', id: 'led-scan', x: 400, y: 100, properties: { color: 'blue' } },
+      { type: 'wokwi-led', id: 'led-found', x: 400, y: 180, properties: { color: 'green' } },
+    ],
+    wires: [
+      { id: 'w1', start: { componentId: 'nano-rp2040', pinName: 'D12' }, end: { componentId: 'led-scan', pinName: 'A' }, color: '#4488ff' },
+      { id: 'w2', start: { componentId: 'nano-rp2040', pinName: 'D10' }, end: { componentId: 'led-found', pinName: 'A' }, color: '#00cc00' },
+    ],
+  },
+
+  {
+    id: 'pico-i2c-rtc-read',
+    title: '[Pico] I2C RTC Read',
+    description: 'Read time from a virtual DS1307 RTC over I2C on Raspberry Pi Pico',
+    category: 'communication',
+    difficulty: 'intermediate',
+    boardType: 'raspberry-pi-pico',
+    code: `// Raspberry Pi Pico — I2C DS1307 RTC Read
+// Reads time from virtual RTC at address 0x68
+
+#include <Wire.h>
+
+byte bcdToDec(byte val) {
+  return ((val >> 4) * 10) + (val & 0x0F);
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(500);
+  Wire.begin();
+  Serial.println("=== Pico I2C RTC Read ===");
+  Serial.println("Reading DS1307 at 0x68 (system time)");
+  Serial.println();
+}
+
+void loop() {
+  // Set register pointer to 0
+  Wire.beginTransmission(0x68);
+  Wire.write(0x00);
+  Wire.endTransmission();
+
+  // Read 7 bytes: sec, min, hr, dow, date, month, year
+  Wire.requestFrom(0x68, 7);
+  if (Wire.available() >= 7) {
+    byte sec   = bcdToDec(Wire.read() & 0x7F);
+    byte min   = bcdToDec(Wire.read());
+    byte hr    = bcdToDec(Wire.read() & 0x3F);
+    byte dow   = bcdToDec(Wire.read());
+    byte date  = bcdToDec(Wire.read());
+    byte month = bcdToDec(Wire.read());
+    byte year  = bcdToDec(Wire.read());
+
+    const char* days[] = {"", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+
+    Serial.print("Time: ");
+    if (hr < 10) Serial.print('0'); Serial.print(hr); Serial.print(':');
+    if (min < 10) Serial.print('0'); Serial.print(min); Serial.print(':');
+    if (sec < 10) Serial.print('0'); Serial.print(sec);
+    Serial.print("  Date: ");
+    Serial.print(days[dow]); Serial.print(' ');
+    if (date < 10) Serial.print('0'); Serial.print(date); Serial.print('/');
+    if (month < 10) Serial.print('0'); Serial.print(month); Serial.print('/');
+    Serial.print("20"); if (year < 10) Serial.print('0'); Serial.println(year);
+  } else {
+    Serial.println("RTC not responding!");
+  }
+
+  delay(1000);
+}
+`,
+    components: [
+      { type: 'wokwi-led', id: 'led-i2c', x: 400, y: 100, properties: { color: 'blue' } },
+      { type: 'wokwi-led', id: 'led-rtc', x: 400, y: 180, properties: { color: 'yellow' } },
+    ],
+    wires: [
+      { id: 'w-sda', start: { componentId: 'nano-rp2040', pinName: 'D12' }, end: { componentId: 'led-i2c', pinName: 'A' }, color: '#4488ff' },
+      { id: 'w-scl', start: { componentId: 'nano-rp2040', pinName: 'D10' }, end: { componentId: 'led-rtc', pinName: 'A' }, color: '#ffaa00' },
+    ],
+  },
+
+  {
+    id: 'pico-i2c-eeprom-rw',
+    title: '[Pico] I2C EEPROM R/W',
+    description: 'Write and read back data to a virtual I2C EEPROM on the Pico',
+    category: 'communication',
+    difficulty: 'intermediate',
+    boardType: 'raspberry-pi-pico',
+    code: `// Raspberry Pi Pico — I2C EEPROM Read/Write
+// Writes data to virtual EEPROM at 0x50 and reads it back
+
+#include <Wire.h>
+
+#define EEPROM_ADDR 0x50
+
+void eepromWrite(byte memAddr, byte data) {
+  Wire.beginTransmission(EEPROM_ADDR);
+  Wire.write(memAddr);
+  Wire.write(data);
+  Wire.endTransmission();
+  delay(5); // EEPROM write cycle
+}
+
+byte eepromRead(byte memAddr) {
+  Wire.beginTransmission(EEPROM_ADDR);
+  Wire.write(memAddr);
+  Wire.endTransmission();
+  Wire.requestFrom(EEPROM_ADDR, 1);
+  return Wire.available() ? Wire.read() : 0xFF;
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(500);
+  Wire.begin();
+  Serial.println("=== Pico I2C EEPROM Test ===");
+  Serial.println();
+
+  // Write 8 bytes
+  Serial.println("Writing 8 bytes...");
+  byte testData[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE};
+  for (int i = 0; i < 8; i++) {
+    eepromWrite(i, testData[i]);
+    Serial.print("  ["); Serial.print(i);
+    Serial.print("] = 0x");
+    if (testData[i] < 16) Serial.print('0');
+    Serial.println(testData[i], HEX);
+  }
+  Serial.println();
+
+  // Read back
+  Serial.println("Reading back...");
+  int pass = 0;
+  for (int i = 0; i < 8; i++) {
+    byte val = eepromRead(i);
+    Serial.print("  ["); Serial.print(i);
+    Serial.print("] = 0x");
+    if (val < 16) Serial.print('0');
+    Serial.print(val, HEX);
+    if (val == testData[i]) {
+      Serial.println(" OK");
+      pass++;
+    } else {
+      Serial.print(" FAIL (expected 0x");
+      Serial.print(testData[i], HEX);
+      Serial.println(")");
+    }
+  }
+
+  Serial.println();
+  Serial.print("Result: ");
+  Serial.print(pass);
+  Serial.println("/8 passed");
+}
+
+void loop() {
+  delay(10000);
+}
+`,
+    components: [
+      { type: 'wokwi-led', id: 'led-write', x: 400, y: 100, properties: { color: 'red' } },
+      { type: 'wokwi-led', id: 'led-read', x: 400, y: 180, properties: { color: 'green' } },
+    ],
+    wires: [
+      { id: 'w-sda', start: { componentId: 'nano-rp2040', pinName: 'D12' }, end: { componentId: 'led-write', pinName: 'A' }, color: '#ff4444' },
+      { id: 'w-scl', start: { componentId: 'nano-rp2040', pinName: 'D10' }, end: { componentId: 'led-read', pinName: 'A' }, color: '#00cc00' },
+    ],
+  },
+
+  {
+    id: 'pico-spi-loopback',
+    title: '[Pico] SPI Loopback',
+    description: 'SPI loopback test on RP2040 — sends and receives bytes via SPI0',
+    category: 'communication',
+    difficulty: 'intermediate',
+    boardType: 'raspberry-pi-pico',
+    code: `// Raspberry Pi Pico — SPI Loopback Test
+// Sends bytes over SPI0 and reads the loopback response
+// Default SPI0 pins: MISO=GP16, MOSI=GP19, SCK=GP18, CS=GP17
+
+#include <SPI.h>
+
+void setup() {
+  Serial.begin(115200);
+  delay(500);
+  Serial.println("=== Pico SPI Loopback Test ===");
+  Serial.println("SPI0: MISO=GP16, MOSI=GP19, SCK=GP18");
+  Serial.println();
+
+  SPI.begin();
+  SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
+
+  // Send test bytes
+  byte testBytes[] = {0x55, 0xAA, 0xFF, 0x00, 0x42};
+  int count = sizeof(testBytes);
+
+  Serial.println("Sending bytes and reading loopback:");
+  for (int i = 0; i < count; i++) {
+    byte rxByte = SPI.transfer(testBytes[i]);
+    Serial.print("  TX: 0x");
+    if (testBytes[i] < 16) Serial.print('0');
+    Serial.print(testBytes[i], HEX);
+    Serial.print("  RX: 0x");
+    if (rxByte < 16) Serial.print('0');
+    Serial.print(rxByte, HEX);
+    Serial.print("  ");
+    Serial.println(rxByte == testBytes[i] ? "MATCH" : "DIFFER");
+  }
+
+  SPI.endTransaction();
+  Serial.println();
+  Serial.println("SPI test complete.");
+}
+
+void loop() {
+  delay(10000);
+}
+`,
+    components: [
+      { type: 'wokwi-led', id: 'led-mosi', x: 400, y: 100, properties: { color: 'red' } },
+      { type: 'wokwi-led', id: 'led-miso', x: 400, y: 180, properties: { color: 'green' } },
+      { type: 'wokwi-led', id: 'led-sck', x: 400, y: 260, properties: { color: 'yellow' } },
+    ],
+    wires: [
+      { id: 'w-mosi', start: { componentId: 'nano-rp2040', pinName: 'D7' }, end: { componentId: 'led-mosi', pinName: 'A' }, color: '#ff4444' },
+      { id: 'w-miso', start: { componentId: 'nano-rp2040', pinName: 'D4' }, end: { componentId: 'led-miso', pinName: 'A' }, color: '#00cc00' },
+      { id: 'w-sck', start: { componentId: 'nano-rp2040', pinName: 'D6' }, end: { componentId: 'led-sck', pinName: 'A' }, color: '#ffaa00' },
+    ],
+  },
+
+  {
+    id: 'pico-adc-read',
+    title: '[Pico] ADC Read',
+    description: 'Read analog values from GPIO26-28 and internal temperature sensor',
+    category: 'sensors',
+    difficulty: 'beginner',
+    boardType: 'raspberry-pi-pico',
+    code: `// Raspberry Pi Pico — ADC Read Test
+// Reads analog values from A0-A2 (GPIO26-28) and the internal temp sensor
+
+void setup() {
+  Serial.begin(115200);
+  delay(500);
+  Serial.println("=== Pico ADC Read ===");
+  Serial.println("A0=GP26  A1=GP27  A2=GP28  Temp=internal");
+  Serial.println("12-bit resolution (0-4095), 3.3V ref");
+  Serial.println();
+
+  analogReadResolution(12);
+}
+
+void loop() {
+  int a0 = analogRead(A0);
+  int a1 = analogRead(A1);
+  int a2 = analogRead(A2);
+
+  // Internal temperature sensor on channel 4
+  // T = 27 - (V - 0.706) / 0.001721
+  int tempRaw = analogRead(A3); // Channel 4 mapped to A3 by Pico core
+  float voltage = tempRaw * 3.3f / 4095.0f;
+  float tempC = 27.0f - (voltage - 0.706f) / 0.001721f;
+
+  Serial.print("A0: "); Serial.print(a0);
+  Serial.print("  A1: "); Serial.print(a1);
+  Serial.print("  A2: "); Serial.print(a2);
+  Serial.print("  Temp: "); Serial.print(tempC, 1); Serial.println(" C");
+
+  delay(1000);
+}
+`,
+    components: [
+      { type: 'wokwi-potentiometer', id: 'pot-a0', x: 400, y: 80, properties: {} },
+      { type: 'wokwi-potentiometer', id: 'pot-a1', x: 400, y: 200, properties: {} },
+      { type: 'wokwi-led', id: 'led-temp', x: 400, y: 320, properties: { color: 'red' } },
+    ],
+    wires: [
+      { id: 'w-a0', start: { componentId: 'nano-rp2040', pinName: 'A0' }, end: { componentId: 'pot-a0', pinName: 'SIG' }, color: '#4488ff' },
+      { id: 'w-a1', start: { componentId: 'nano-rp2040', pinName: 'A1' }, end: { componentId: 'pot-a1', pinName: 'SIG' }, color: '#44cc44' },
+      { id: 'w-temp', start: { componentId: 'nano-rp2040', pinName: 'D2' }, end: { componentId: 'led-temp', pinName: 'A' }, color: '#ff4444' },
+    ],
+  },
+
+  {
+    id: 'pico-multi-protocol',
+    title: '[Pico] Multi-Protocol Demo',
+    description: 'Comprehensive test: Serial + I2C + SPI + ADC on the Raspberry Pi Pico',
+    category: 'communication',
+    difficulty: 'advanced',
+    boardType: 'raspberry-pi-pico',
+    code: `// Raspberry Pi Pico — Multi-Protocol Demo
+// Tests Serial, I2C, SPI, and ADC all together
+
+#include <Wire.h>
+#include <SPI.h>
+
+void setup() {
+  pinMode(LED_BUILTIN, OUTPUT);
+  Serial.begin(115200);
+  delay(500);
+
+  Serial.println("==============================");
+  Serial.println(" Pico Multi-Protocol Demo");
+  Serial.println("==============================");
+  Serial.println();
+
+  // ── 1. I2C Scanner ──
+  Wire.begin();
+  Serial.println("[I2C] Scanning bus...");
+  int found = 0;
+  for (byte addr = 1; addr < 127; addr++) {
+    Wire.beginTransmission(addr);
+    if (Wire.endTransmission() == 0) {
+      found++;
+      Serial.print("  Found device at 0x");
+      if (addr < 16) Serial.print('0');
+      Serial.println(addr, HEX);
+    }
+  }
+  Serial.print("  Total devices: "); Serial.println(found);
+  Serial.println();
+
+  // ── 2. I2C EEPROM R/W ──
+  Serial.println("[I2C] EEPROM test at 0x50...");
+  Wire.beginTransmission(0x50);
+  Wire.write(0x00); // register 0
+  Wire.write(0x42); // data
+  Wire.endTransmission();
+  delay(5);
+
+  Wire.beginTransmission(0x50);
+  Wire.write(0x00);
+  Wire.endTransmission();
+  Wire.requestFrom(0x50, 1);
+  if (Wire.available()) {
+    byte val = Wire.read();
+    Serial.print("  Wrote 0x42, Read 0x");
+    Serial.print(val, HEX);
+    Serial.println(val == 0x42 ? " — OK" : " — FAIL");
+  }
+  Serial.println();
+
+  // ── 3. I2C RTC ──
+  Serial.println("[I2C] Reading DS1307 RTC at 0x68...");
+  Wire.beginTransmission(0x68);
+  Wire.write(0x00);
+  Wire.endTransmission();
+  Wire.requestFrom(0x68, 3);
+  if (Wire.available() >= 3) {
+    byte sec = ((Wire.read() & 0x7F) >> 4) * 10 + (Wire.read() & 0x0F);
+    byte min2 = Wire.read();
+    (void)sec; (void)min2;
+    Serial.println("  RTC responded OK");
+  }
+  Serial.println();
+
+  // ── 4. SPI Loopback ──
+  Serial.println("[SPI] Loopback test...");
+  SPI.begin();
+  SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
+  byte tx = 0xAB;
+  byte rx = SPI.transfer(tx);
+  Serial.print("  TX: 0x"); Serial.print(tx, HEX);
+  Serial.print("  RX: 0x"); Serial.println(rx, HEX);
+  SPI.endTransaction();
+  Serial.println();
+
+  // ── 5. ADC ──
+  Serial.println("[ADC] Reading analog channels...");
+  analogReadResolution(12);
+  int a0 = analogRead(A0);
+  Serial.print("  A0 (GP26): "); Serial.println(a0);
+  Serial.println();
+
+  // ── 6. GPIO ──
+  Serial.println("[GPIO] Blinking LED...");
+  for (int i = 0; i < 3; i++) {
+    digitalWrite(LED_BUILTIN, HIGH);
+    delay(200);
+    digitalWrite(LED_BUILTIN, LOW);
+    delay(200);
+  }
+  Serial.println("  3 blinks done");
+  Serial.println();
+
+  Serial.println("=== All protocol tests complete ===");
+}
+
+void loop() {
+  // Heartbeat
+  static unsigned long last = 0;
+  if (millis() - last >= 3000) {
+    last = millis();
+    Serial.print("[Heartbeat] ");
+    Serial.print(millis() / 1000);
+    Serial.println("s");
+  }
+}
+`,
+    components: [
+      { type: 'wokwi-led', id: 'led-i2c', x: 400, y: 80, properties: { color: 'blue' } },
+      { type: 'wokwi-led', id: 'led-spi', x: 400, y: 160, properties: { color: 'yellow' } },
+      { type: 'wokwi-potentiometer', id: 'pot-adc', x: 400, y: 240, properties: {} },
+      { type: 'wokwi-led', id: 'led-gpio', x: 400, y: 360, properties: { color: 'green' } },
+    ],
+    wires: [
+      { id: 'w-i2c', start: { componentId: 'nano-rp2040', pinName: 'D12' }, end: { componentId: 'led-i2c', pinName: 'A' }, color: '#4488ff' },
+      { id: 'w-spi', start: { componentId: 'nano-rp2040', pinName: 'D7' }, end: { componentId: 'led-spi', pinName: 'A' }, color: '#ffaa00' },
+      { id: 'w-adc', start: { componentId: 'nano-rp2040', pinName: 'A0' }, end: { componentId: 'pot-adc', pinName: 'SIG' }, color: '#cc44cc' },
+      { id: 'w-gpio', start: { componentId: 'nano-rp2040', pinName: 'D2' }, end: { componentId: 'led-gpio', pinName: 'A' }, color: '#00cc00' },
+    ],
   },
 ];
 

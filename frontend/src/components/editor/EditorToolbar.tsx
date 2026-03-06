@@ -1,8 +1,11 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useEditorStore } from '../../store/useEditorStore';
-import { useSimulatorStore, BOARD_FQBN } from '../../store/useSimulatorStore';
+import { useSimulatorStore, BOARD_FQBN, BOARD_LABELS } from '../../store/useSimulatorStore';
 import { compileCode } from '../../services/compilation';
 import { LibraryManagerModal } from '../simulator/LibraryManagerModal';
+import { CompilationConsole } from './CompilationConsole';
+import { parseCompileResult } from '../../utils/compilationLogger';
+import type { CompilationLog } from '../../utils/compilationLogger';
 import './EditorToolbar.css';
 
 export const EditorToolbar = () => {
@@ -20,13 +23,30 @@ export const EditorToolbar = () => {
   const [compiling, setCompiling] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [libManagerOpen, setLibManagerOpen] = useState(false);
+  const [consoleOpen, setConsoleOpen] = useState(false);
+  const [compileLogs, setCompileLogs] = useState<CompilationLog[]>([]);
+
+  const addLog = useCallback((log: CompilationLog) => {
+    setCompileLogs((prev) => [...prev, log]);
+  }, []);
 
   const handleCompile = async () => {
     setCompiling(true);
     setMessage(null);
+    setConsoleOpen(true);
+
+    const fqbn = BOARD_FQBN[boardType];
+    const boardLabel = BOARD_LABELS[boardType];
+
+    addLog({ timestamp: new Date(), type: 'info', message: `Starting compilation for ${boardLabel} (${fqbn})...` });
+
     try {
-      const fqbn = BOARD_FQBN[boardType];
       const result = await compileCode(code, fqbn);
+
+      // Parse the full result into log entries
+      const resultLogs = parseCompileResult(result, boardLabel);
+      setCompileLogs((prev) => [...prev, ...resultLogs]);
+
       if (result.success) {
         if (result.hex_content) {
           setCompiledHex(result.hex_content);
@@ -41,7 +61,9 @@ export const EditorToolbar = () => {
         setMessage({ type: 'error', text: result.error || result.stderr || 'Compile failed' });
       }
     } catch (err) {
-      setMessage({ type: 'error', text: err instanceof Error ? err.message : 'Compile failed' });
+      const errMsg = err instanceof Error ? err.message : 'Compile failed';
+      addLog({ timestamp: new Date(), type: 'error', message: errMsg });
+      setMessage({ type: 'error', text: errMsg });
     } finally {
       setCompiling(false);
     }
@@ -159,12 +181,38 @@ export const EditorToolbar = () => {
               <path d="M12 22V12" />
             </svg>
           </button>
+
+          <div className="tb-divider" />
+
+          {/* Output Console toggle */}
+          <button
+            onClick={() => setConsoleOpen((v) => !v)}
+            className={`tb-btn tb-btn-output${consoleOpen ? ' tb-btn-output-active' : ''}`}
+            title="Toggle Output Console"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="4 17 10 11 4 5" />
+              <line x1="12" y1="19" x2="20" y2="19" />
+            </svg>
+          </button>
         </div>
       </div>
 
       {/* Error detail bar */}
-      {message?.type === 'error' && message.text.length > 40 && (
+      {message?.type === 'error' && message.text.length > 40 && !consoleOpen && (
         <div className="toolbar-error-detail">{message.text}</div>
+      )}
+
+      {/* Compilation Console */}
+      {consoleOpen && (
+        <div style={{ height: 200, flexShrink: 0 }}>
+          <CompilationConsole
+            isOpen={consoleOpen}
+            onClose={() => setConsoleOpen(false)}
+            logs={compileLogs}
+            onClear={() => setCompileLogs([])}
+          />
+        </div>
       )}
 
       <LibraryManagerModal isOpen={libManagerOpen} onClose={() => setLibManagerOpen(false)} />

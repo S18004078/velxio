@@ -6,14 +6,91 @@ from pathlib import Path
 
 
 class ArduinoCLIService:
+    # Board manager URLs for cores that aren't built-in
+    CORE_URLS: dict[str, str] = {
+        "rp2040:rp2040": "https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json",
+        "esp32:esp32": "https://espressif.github.io/arduino-esp32/package_esp32_index.json",
+    }
+
+    # Cores to auto-install on startup
+    REQUIRED_CORES = ["arduino:avr"]
+
+    # Cores to install on-demand when a board FQBN is requested
+    ON_DEMAND_CORES: dict[str, str] = {
+        "rp2040": "rp2040:rp2040",
+        "mbed_rp2040": "arduino:mbed_rp2040",
+        "esp32": "esp32:esp32",
+    }
+
     def __init__(self, cli_path: str = "arduino-cli"):
         self.cli_path = cli_path
+        self._ensure_board_urls()
         self._ensure_core_installed()
+
+    def _ensure_board_urls(self):
+        """Register additional board-manager URLs in arduino-cli config."""
+        try:
+            # Ensure config file exists (arduino-cli requires it for config add)
+            result = subprocess.run(
+                [self.cli_path, "config", "dump", "--format", "json"],
+                capture_output=True, text=True
+            )
+            import json
+            try:
+                cfg = json.loads(result.stdout)
+            except Exception:
+                cfg = {}
+
+            # If config is empty/missing, initialize it
+            config_dict = cfg.get("config", cfg)
+            if not config_dict or config_dict == {}:
+                print("[arduino-cli] Initializing config file...")
+                subprocess.run(
+                    [self.cli_path, "config", "init", "--overwrite"],
+                    capture_output=True, text=True
+                )
+
+            # Re-read after init
+            result = subprocess.run(
+                [self.cli_path, "config", "dump", "--format", "json"],
+                capture_output=True, text=True
+            )
+            try:
+                cfg = json.loads(result.stdout)
+            except Exception:
+                cfg = {}
+
+            existing = set()
+            # Handle both flat and nested config shapes
+            config_dict = cfg.get("config", cfg)
+            bm = config_dict.get("board_manager", config_dict)
+            urls = bm.get("additional_urls", [])
+            if isinstance(urls, str):
+                existing.add(urls)
+            elif isinstance(urls, list):
+                existing.update(urls)
+
+            for url in self.CORE_URLS.values():
+                if url not in existing:
+                    print(f"[arduino-cli] Adding board manager URL: {url}")
+                    subprocess.run(
+                        [self.cli_path, "config", "add", "board_manager.additional_urls", url],
+                        capture_output=True, text=True
+                    )
+
+            # Refresh index so new cores are discoverable
+            print("[arduino-cli] Updating core index...")
+            subprocess.run(
+                [self.cli_path, "core", "update-index"],
+                capture_output=True, text=True
+            )
+        except Exception as e:
+            print(f"Warning: Could not configure board URLs: {e}")
 
     def _ensure_core_installed(self):
         """
-        Ensure Arduino AVR core is installed.
-        RP2040 core is optional (installed separately by the user).
+        Ensure essential cores (arduino:avr) are installed at startup.
+        Other cores (RP2040, ESP32) are installed on-demand.
         """
         try:
             result = subprocess.run(
@@ -22,16 +99,107 @@ class ArduinoCLIService:
                 text=True
             )
 
-            if "arduino:avr" not in result.stdout:
-                print("Arduino AVR core not installed. Installing...")
-                subprocess.run(
-                    [self.cli_path, "core", "install", "arduino:avr"],
-                    check=True
-                )
-                print("Arduino AVR core installed successfully")
+            for core_id in self.REQUIRED_CORES:
+                if core_id not in result.stdout:
+                    print(f"[arduino-cli] Core {core_id} not installed. Installing...")
+                    subprocess.run(
+                        [self.cli_path, "core", "install", core_id],
+                        check=True
+                    )
+                    print(f"[arduino-cli] Core {core_id} installed successfully")
         except Exception as e:
-            print(f"Warning: Could not verify arduino:avr core: {e}")
+            print(f"Warning: Could not verify cores: {e}")
             print("Please ensure arduino-cli is installed and in PATH")
+
+    def _core_id_for_fqbn(self, fqbn: str) -> str | None:
+        """Extract the core ID needed for a given FQBN."""
+        for prefix, core_id in self.ON_DEMAND_CORES.items():
+            if prefix in fqbn:
+                return core_id
+        return None
+
+    def _is_core_installed(self, core_id: str) -> bool:
+        """Check whether a core is currently installed."""
+        result = subprocess.run(
+            [self.cli_path, "core", "list"],
+            capture_output=True, text=True
+        )
+        return core_id in result.stdout
+
+    async def ensure_core_for_board(self, fqbn: str) -> dict:
+        """
+        Auto-install the core required by a board FQBN if not present.
+        Returns status dict with install log.
+        """
+        core_id = self._core_id_for_fqbn(fqbn)
+        if core_id is None:
+            # Built-in core (arduino:avr) — should already be there
+            return {"needed": False, "installed": True, "core_id": None, "log": ""}
+
+        if self._is_core_installed(core_id):
+            return {"needed": False, "installed": True, "core_id": core_id, "log": ""}
+
+        # Install the core
+        print(f"[arduino-cli] Auto-installing core {core_id} for board {fqbn}...")
+
+        def _install():
+            return subprocess.run(
+                [self.cli_path, "core", "install", core_id],
+                capture_output=True, text=True
+            )
+
+        result = await asyncio.to_thread(_install)
+        log = result.stdout + "\n" + result.stderr
+
+        if result.returncode == 0:
+            print(f"[arduino-cli] Core {core_id} installed successfully")
+            return {"needed": True, "installed": True, "core_id": core_id, "log": log.strip()}
+        else:
+            print(f"[arduino-cli] Failed to install core {core_id}: {result.stderr}")
+            return {"needed": True, "installed": False, "core_id": core_id, "log": log.strip()}
+
+    async def get_setup_status(self) -> dict:
+        """Return the current state of arduino-cli and installed cores."""
+        try:
+            version_result = subprocess.run(
+                [self.cli_path, "version"],
+                capture_output=True, text=True
+            )
+            version = version_result.stdout.strip() if version_result.returncode == 0 else "unknown"
+
+            list_result = subprocess.run(
+                [self.cli_path, "core", "list"],
+                capture_output=True, text=True
+            )
+            cores_raw = list_result.stdout.strip()
+        except FileNotFoundError:
+            return {
+                "cli_available": False,
+                "version": None,
+                "cores": [],
+                "error": "arduino-cli not found in PATH"
+            }
+        except Exception as e:
+            return {
+                "cli_available": False,
+                "version": None,
+                "cores": [],
+                "error": str(e)
+            }
+
+        # Parse installed cores
+        cores = []
+        for line in cores_raw.splitlines()[1:]:
+            parts = line.split()
+            if len(parts) >= 3:
+                cores.append({"id": parts[0], "installed": parts[1], "latest": parts[2]})
+
+        return {
+            "cli_available": True,
+            "version": version,
+            "cores": cores,
+            "error": None
+        }
 
     def _is_rp2040_board(self, fqbn: str) -> bool:
         """Return True if the FQBN targets an RP2040/RP2350 board."""

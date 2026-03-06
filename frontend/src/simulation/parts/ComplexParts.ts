@@ -1,5 +1,6 @@
 import { PartSimulationRegistry } from './PartSimulationRegistry';
 import type { AnySimulator } from './PartSimulationRegistry';
+import { RP2040Simulator } from '../RP2040Simulator';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -8,11 +9,28 @@ function getADC(avrSimulator: AnySimulator): any | null {
     return (avrSimulator as any).getADC?.() ?? null;
 }
 
-/** Write an analog voltage (0-5V) to an ADC channel derived from an Arduino pin (A0-A5 = 14-19) */
-function setAdcVoltage(avrSimulator: AnySimulator, arduinoPin: number, voltage: number): boolean {
-    if (arduinoPin < 14 || arduinoPin > 19) return false;
-    const channel = arduinoPin - 14;
-    const adc = getADC(avrSimulator);
+/**
+ * Write an analog voltage to an ADC channel, supporting both AVR and RP2040.
+ *
+ * AVR:    pins 14-19 → ADC channels 0-5, voltage stored directly (0-5V)
+ * RP2040: GPIO 26-29 → ADC channels 0-3, converted to 12-bit value (0-4095)
+ */
+function setAdcVoltage(simulator: AnySimulator, pin: number, voltage: number): boolean {
+    // RP2040: GPIO26-29 → ADC channels 0-3
+    if (simulator instanceof RP2040Simulator) {
+        if (pin >= 26 && pin <= 29) {
+            const channel = pin - 26;
+            // RP2040 ADC: 12-bit, 3.3V reference
+            const adcValue = Math.round((voltage / 3.3) * 4095);
+            simulator.setADCValue(channel, adcValue);
+            return true;
+        }
+        return false;
+    }
+    // AVR: pins 14-19 → ADC channels 0-5
+    if (pin < 14 || pin > 19) return false;
+    const channel = pin - 14;
+    const adc = getADC(simulator);
     if (!adc) return false;
     adc.channelValues[channel] = voltage;
     return true;
@@ -74,17 +92,24 @@ PartSimulationRegistry.register('rgb-led', {
 // ─── Potentiometer (rotary) ──────────────────────────────────────────────────
 
 PartSimulationRegistry.register('potentiometer', {
-    attachEvents: (element, avrSimulator, getArduinoPinHelper) => {
-        const arduinoPin = getArduinoPinHelper('SIG');
-        if (arduinoPin === null) return () => { };
+    attachEvents: (element, simulator, getArduinoPinHelper) => {
+        const pin = getArduinoPinHelper('SIG');
+        if (pin === null) return () => { };
+
+        // Determine reference voltage based on board type
+        const isRP2040 = simulator instanceof RP2040Simulator;
+        const refVoltage = isRP2040 ? 3.3 : 5.0;
 
         const onInput = () => {
             const raw = parseInt((element as any).value || '0', 10);
-            const volts = (raw / 1023.0) * 5.0;
-            if (!setAdcVoltage(avrSimulator, arduinoPin, volts)) {
-                console.warn('[Potentiometer] ADC not available — is AVRADC initialized?');
+            const volts = (raw / 1023.0) * refVoltage;
+            if (!setAdcVoltage(simulator, pin, volts)) {
+                console.warn(`[Potentiometer] ADC not available for pin ${pin}`);
             }
         };
+
+        // Fire once on attach to set initial value
+        onInput();
 
         element.addEventListener('input', onInput);
         return () => element.removeEventListener('input', onInput);
@@ -99,15 +124,20 @@ PartSimulationRegistry.register('slide-potentiometer', {
         if (arduinoPin === null) return () => { };
 
         const el = element as any;
+        const isRP2040 = avrSimulator instanceof RP2040Simulator;
+        const refVoltage = isRP2040 ? 3.3 : 5.0;
 
         const onInput = () => {
             const min = el.min ?? 0;
             const max = el.max ?? 1023;
             const value = el.value ?? 0;
             const normalized = (value - min) / (max - min || 1);
-            const volts = normalized * 5.0;
+            const volts = normalized * refVoltage;
             setAdcVoltage(avrSimulator, arduinoPin, volts);
         };
+
+        // Fire once on attach to set initial value
+        onInput();
 
         element.addEventListener('input', onInput);
         return () => element.removeEventListener('input', onInput);

@@ -10,6 +10,7 @@ export interface CompileResult {
   stdout: string;
   stderr: string;
   error?: string;
+  core_install_log?: string;  // Log from auto core installation
 }
 
 export async function compileCode(

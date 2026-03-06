@@ -15,6 +15,7 @@ import React, { useRef, useEffect, useCallback } from 'react';
 import type { ComponentMetadata } from '../types/component-metadata';
 import { useSimulatorStore } from '../store/useSimulatorStore';
 import { PartSimulationRegistry } from '../simulation/parts';
+import { isBoardComponent, boardPinToNumber } from '../utils/boardPinMapping';
 
 interface DynamicComponentProps {
   id: string;
@@ -195,11 +196,12 @@ export const DynamicComponent: React.FC<DynamicComponentProps> = ({
         );
 
         for (const w of wires) {
-          const arduinoEndpoint = w.start.componentId === 'arduino-uno' ? w.start :
-            w.end.componentId === 'arduino-uno' ? w.end : null;
-          if (arduinoEndpoint) {
-            const pin = parseInt(arduinoEndpoint.pinName, 10);
-            if (!isNaN(pin)) return pin;
+          // Find which endpoint connects to a board component
+          const boardEndpoint = isBoardComponent(w.start.componentId) ? w.start :
+            isBoardComponent(w.end.componentId) ? w.end : null;
+          if (boardEndpoint) {
+            const pin = boardPinToNumber(boardEndpoint.componentId, boardEndpoint.pinName);
+            if (pin !== null) return pin;
           }
         }
         return null;

@@ -3,6 +3,7 @@ import { AVRSimulator } from '../simulation/AVRSimulator';
 import { RP2040Simulator } from '../simulation/RP2040Simulator';
 import { PinManager } from '../simulation/PinManager';
 import { VirtualDS1307, VirtualTempSensor, I2CMemoryDevice } from '../simulation/I2CBusManager';
+import type { RP2040I2CDevice } from '../simulation/RP2040Simulator';
 import type { Wire, WireInProgress, WireEndpoint } from '../types/wire';
 import { calculatePinPosition } from '../utils/pinPositionCalculator';
 
@@ -173,11 +174,10 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => {
       const simulator = type === 'arduino-uno'
         ? new AVRSimulator(pinManager)
         : new RP2040Simulator(pinManager);
-      if (simulator instanceof AVRSimulator) {
-        simulator.onSerialData = (char: string) => {
-          set((s) => ({ serialOutput: s.serialOutput + char }));
-        };
-      }
+      // Wire serial output callback for both simulator types
+      simulator.onSerialData = (char: string) => {
+        set((s) => ({ serialOutput: s.serialOutput + char }));
+      };
       set({ boardType: type, simulator, compiledHex: null, serialOutput: '' });
       console.log(`Board switched to: ${type}`);
     },
@@ -187,11 +187,10 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => {
       const simulator = boardType === 'arduino-uno'
         ? new AVRSimulator(pinManager)
         : new RP2040Simulator(pinManager);
-      if (simulator instanceof AVRSimulator) {
-        simulator.onSerialData = (char: string) => {
-          set((s) => ({ serialOutput: s.serialOutput + char }));
-        };
-      }
+      // Wire serial output callback for both simulator types
+      simulator.onSerialData = (char: string) => {
+        set((s) => ({ serialOutput: s.serialOutput + char }));
+      };
       set({ simulator, serialOutput: '' });
       console.log(`Simulator initialized: ${boardType}`);
     },
@@ -233,7 +232,11 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => {
         if (simulator instanceof AVRSimulator && simulator.i2cBus) {
           simulator.addI2CDevice(new VirtualDS1307());
           simulator.addI2CDevice(new VirtualTempSensor());
-          simulator.addI2CDevice(new I2CMemoryDevice(0x50)); // generic EEPROM at 0x50
+          simulator.addI2CDevice(new I2CMemoryDevice(0x50));
+        } else if (simulator instanceof RP2040Simulator) {
+          simulator.addI2CDevice(new VirtualDS1307() as RP2040I2CDevice);
+          simulator.addI2CDevice(new VirtualTempSensor() as RP2040I2CDevice);
+          simulator.addI2CDevice(new I2CMemoryDevice(0x50) as RP2040I2CDevice);
         }
         simulator.start();
         set({ running: true });
@@ -252,12 +255,10 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => {
       const { simulator } = get();
       if (simulator) {
         simulator.reset();
-        // Re-wire serial callback after reset
-        if (simulator instanceof AVRSimulator) {
-          simulator.onSerialData = (char: string) => {
-            set((s) => ({ serialOutput: s.serialOutput + char }));
-          };
-        }
+        // Re-wire serial callback after reset (both simulator types)
+        simulator.onSerialData = (char: string) => {
+          set((s) => ({ serialOutput: s.serialOutput + char }));
+        };
         set({ running: false, serialOutput: '' });
       }
     },
@@ -500,7 +501,7 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => {
 
     serialWrite: (text: string) => {
       const { simulator } = get();
-      if (simulator && simulator instanceof AVRSimulator) {
+      if (simulator) {
         simulator.serialWrite(text);
       }
     },

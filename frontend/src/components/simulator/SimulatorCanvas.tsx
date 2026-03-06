@@ -11,6 +11,7 @@ import { PinSelector } from './PinSelector';
 import { WireLayer } from './WireLayer';
 import { PinOverlay } from './PinOverlay';
 import { PartSimulationRegistry } from '../../simulation/parts';
+import { isBoardComponent, boardPinToNumber } from '../../utils/boardPinMapping';
 import type { ComponentMetadata } from '../../types/component-metadata';
 import './SimulatorCanvas.css';
 
@@ -124,9 +125,9 @@ export const SimulatorCanvas = () => {
           const selfEndpoint = isStartSelf ? wire.start : wire.end;
           const otherEndpoint = isStartSelf ? wire.end : wire.start;
 
-          if (otherEndpoint.componentId === 'arduino-uno') {
-            const pin = parseInt(otherEndpoint.pinName, 10);
-            if (!isNaN(pin)) {
+          if (isBoardComponent(otherEndpoint.componentId)) {
+            const pin = boardPinToNumber(otherEndpoint.componentId, otherEndpoint.pinName);
+            if (pin !== null) {
               subscribeComponentToPin(component, pin, selfEndpoint.pinName);
             }
           }

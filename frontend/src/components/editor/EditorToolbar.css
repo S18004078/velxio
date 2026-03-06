@@ -97,6 +97,23 @@
   color: #00e5ff;
 }
 
+/* Output Console toggle */
+.tb-btn-output {
+  color: #9d9d9d;
+}
+.tb-btn-output:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #ccc;
+}
+.tb-btn-output-active {
+  color: #4fc3f7;
+  background: rgba(79, 195, 247, 0.1);
+}
+.tb-btn-output-active:hover {
+  background: rgba(79, 195, 247, 0.18);
+  color: #81d4fa;
+}
+
 /* ── Spin animation (compiling) ─────────────────── */
 @keyframes spin {
   to { transform: rotate(360deg); }
