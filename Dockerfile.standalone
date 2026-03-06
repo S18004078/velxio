@@ -3,33 +3,33 @@ FROM node:20 AS frontend-builder
 
 WORKDIR /app
 
-# Copy package.json for metadata generation
+# Copy package.json for metadata generation and common dependencies
 COPY package.json .
-RUN npm install --ignore-scripts
+RUN npm install
 
 # Build avr8js
 COPY wokwi-libs/avr8js/ wokwi-libs/avr8js/
 WORKDIR /app/wokwi-libs/avr8js
-RUN npm install --ignore-scripts && npm run build
+RUN npm install && npm run build
 
 # Build rp2040js
 COPY wokwi-libs/rp2040js/ wokwi-libs/rp2040js/
 WORKDIR /app/wokwi-libs/rp2040js
-RUN npm install --ignore-scripts && npm run build
+RUN npm install && npm run build
 
 # Build wokwi-elements
 COPY wokwi-libs/wokwi-elements/ wokwi-libs/wokwi-elements/
 WORKDIR /app/wokwi-libs/wokwi-elements
-RUN npm install --ignore-scripts && npm run build
+RUN npm install && npm run build
 
 # Build frontend and generate metadata
 WORKDIR /app
 COPY frontend/ frontend/
 COPY scripts/ scripts/
 WORKDIR /app/frontend
-# We need tsx available in the path for the metadata script
-RUN npm install --ignore-scripts
-# The metadata script uses eval so we must ensure it can run
+# Explicitly install frontend dependencies
+RUN npm install
+# Now run the build which includes metadata generation
 RUN npm run build
 
 
