@@ -205,34 +205,52 @@ class ArduinoCLIService:
         """Return True if the FQBN targets an RP2040/RP2350 board."""
         return any(p in fqbn for p in ("rp2040", "rp2350", "mbed_rp2040", "mbed_rp2350"))
 
-    async def compile(self, code: str, board_fqbn: str = "arduino:avr:uno") -> dict:
+    async def compile(self, files: list[dict], board_fqbn: str = "arduino:avr:uno") -> dict:
         """
-        Compile Arduino sketch using arduino-cli
+        Compile Arduino sketch using arduino-cli.
+
+        `files` is a list of {"name": str, "content": str} dicts.
+        arduino-cli requires the sketch directory to contain a .ino file whose
+        name matches the directory ("sketch").  If none exists we promote the
+        first .ino file to sketch.ino automatically.
 
         Returns:
             dict with keys: success, hex_content, stdout, stderr, error
         """
         print(f"\n=== Starting compilation ===")
         print(f"Board: {board_fqbn}")
-        print(f"Code length: {len(code)} chars")
-        print(f"Code:\n{code}")
+        print(f"Files: {[f['name'] for f in files]}")
 
         # Create temporary directory for sketch
         with tempfile.TemporaryDirectory() as temp_dir:
             sketch_dir = Path(temp_dir) / "sketch"
             sketch_dir.mkdir()
 
-            # arduino-cli requires sketch name to match directory name
-            sketch_file = sketch_dir / "sketch.ino"
+            # Determine whether the caller already provides a "sketch.ino"
+            has_sketch_ino = any(f["name"] == "sketch.ino" for f in files)
+            main_ino_written = False
 
-            # For RP2040 boards, redirect Serial (USB CDC) to Serial1 (UART0)
-            # The emulator captures UART0 output, but the arduino-pico core
-            # defaults Serial to USB CDC which isn't emulated.
-            if "rp2040" in board_fqbn:
-                code = "#define Serial Serial1\n" + code
+            for file_entry in files:
+                name: str = file_entry["name"]
+                content: str = file_entry["content"]
 
-            sketch_file.write_text(code)
-            print(f"Created sketch file: {sketch_file}")
+                # Promote the first .ino to sketch.ino if none explicitly named so
+                write_name = name
+                if not has_sketch_ino and name.endswith(".ino") and not main_ino_written:
+                    write_name = "sketch.ino"
+                    main_ino_written = True
+
+                # RP2040: redirect Serial → Serial1 in the main sketch file only
+                if "rp2040" in board_fqbn and write_name == "sketch.ino":
+                    content = "#define Serial Serial1\n" + content
+
+                (sketch_dir / write_name).write_text(content, encoding="utf-8")
+
+            # Fallback: no .ino files provided at all
+            if not any(f["name"].endswith(".ino") for f in files):
+                (sketch_dir / "sketch.ino").write_text("void setup(){}\nvoid loop(){}", encoding="utf-8")
+
+            print(f"Sketch directory contents: {[p.name for p in sketch_dir.iterdir()]}")
 
             build_dir = sketch_dir / "build"
             build_dir.mkdir()

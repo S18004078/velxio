@@ -1,14 +1,31 @@
-import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
+import { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { EditorPage } from './pages/EditorPage';
 import { ExamplesPage } from './pages/ExamplesPage';
+import { LoginPage } from './pages/LoginPage';
+import { RegisterPage } from './pages/RegisterPage';
+import { UserProfilePage } from './pages/UserProfilePage';
+import { ProjectPage } from './pages/ProjectPage';
+import { useAuthStore } from './store/useAuthStore';
 import './App.css';
 
 function App() {
+  const checkSession = useAuthStore((s) => s.checkSession);
+
+  useEffect(() => {
+    checkSession();
+  }, []);
+
   return (
     <Router>
       <Routes>
         <Route path="/" element={<EditorPage />} />
         <Route path="/examples" element={<ExamplesPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        {/* Specific literal routes must come before wildcard /:username */}
+        <Route path="/:username/:projectName" element={<ProjectPage />} />
+        <Route path="/:username" element={<UserProfilePage />} />
       </Routes>
     </Router>
   );

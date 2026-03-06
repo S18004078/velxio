@@ -6,8 +6,16 @@ router = APIRouter()
 arduino_cli = ArduinoCLIService()
 
 
+class SketchFile(BaseModel):
+    name: str
+    content: str
+
+
 class CompileRequest(BaseModel):
-    code: str
+    # New multi-file API
+    files: list[SketchFile] | None = None
+    # Legacy single-file API (kept for backward compat)
+    code: str | None = None
     board_fqbn: str = "arduino:avr:uno"
 
 
@@ -19,17 +27,28 @@ class CompileResponse(BaseModel):
     stdout: str
     stderr: str
     error: str | None = None
-    core_install_log: str | None = None  # Log from auto core installation
+    core_install_log: str | None = None
 
 
 @router.post("/", response_model=CompileResponse)
 async def compile_sketch(request: CompileRequest):
     """
     Compile Arduino sketch and return hex/binary.
+    Accepts either `files` (multi-file) or legacy `code` (single file).
     Auto-installs the required board core if not present.
     """
+    # Resolve files list
+    if request.files:
+        files = [{"name": f.name, "content": f.content} for f in request.files]
+    elif request.code is not None:
+        files = [{"name": "sketch.ino", "content": request.code}]
+    else:
+        raise HTTPException(
+            status_code=422,
+            detail="Provide either 'files' or 'code' in the request body.",
+        )
+
     try:
-        # Auto-install core if needed (e.g. rp2040:rp2040 for Pico)
         core_status = await arduino_cli.ensure_core_for_board(request.board_fqbn)
         core_log = core_status.get("log", "")
 
@@ -38,10 +57,10 @@ async def compile_sketch(request: CompileRequest):
                 success=False,
                 stdout="",
                 stderr=core_log,
-                error=f"Failed to install required core: {core_status.get('core_id')}"
+                error=f"Failed to install required core: {core_status.get('core_id')}",
             )
 
-        result = await arduino_cli.compile(request.code, request.board_fqbn)
+        result = await arduino_cli.compile(files, request.board_fqbn)
         return CompileResponse(
             success=result["success"],
             hex_content=result.get("hex_content"),
@@ -58,26 +77,17 @@ async def compile_sketch(request: CompileRequest):
 
 @router.get("/setup-status")
 async def setup_status():
-    """
-    Return the current state of arduino-cli and installed cores.
-    Useful for the frontend to show setup diagnostics.
-    """
     return await arduino_cli.get_setup_status()
 
 
 @router.post("/ensure-core")
 async def ensure_core(request: CompileRequest):
-    """
-    Pre-install the core required by a board FQBN without compiling.
-    """
-    result = await arduino_cli.ensure_core_for_board(request.board_fqbn)
+    fqbn = request.board_fqbn
+    result = await arduino_cli.ensure_core_for_board(fqbn)
     return result
 
 
 @router.get("/boards")
 async def list_boards():
-    """
-    List available Arduino boards
-    """
     boards = await arduino_cli.list_boards()
     return {"boards": boards}

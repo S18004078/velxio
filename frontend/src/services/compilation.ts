@@ -2,6 +2,11 @@ import axios from 'axios';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8001/api';
 
+export interface SketchFile {
+  name: string;
+  content: string;
+}
+
 export interface CompileResult {
   success: boolean;
   hex_content?: string;
@@ -10,26 +15,25 @@ export interface CompileResult {
   stdout: string;
   stderr: string;
   error?: string;
-  core_install_log?: string;  // Log from auto core installation
+  core_install_log?: string;
 }
 
 export async function compileCode(
-  code: string,
+  files: SketchFile[],
   board: string = 'arduino:avr:uno'
 ): Promise<CompileResult> {
   try {
     console.log('Sending compilation request to:', `${API_BASE}/compile`);
     console.log('Board:', board);
-    console.log('Code length:', code.length);
+    console.log('Files:', files.map((f) => f.name));
 
-    const response = await axios.post<CompileResult>(`${API_BASE}/compile`, {
-      code,
-      board_fqbn: board,
-    });
+    const response = await axios.post<CompileResult>(
+      `${API_BASE}/compile`,
+      { files, board_fqbn: board },
+      { withCredentials: true }
+    );
 
     console.log('Compilation response status:', response.status);
-    console.log('Compilation response data:', response.data);
-
     return response.data;
   } catch (error) {
     console.error('Compilation request failed:', error);
@@ -37,11 +41,11 @@ export async function compileCode(
     if (axios.isAxiosError(error)) {
       if (error.response) {
         console.error('Error response data:', error.response.data);
-        console.error('Error response status:', error.response.status);
         return error.response.data;
       } else if (error.request) {
-        console.error('No response received:', error.request);
-        throw new Error('No response from server. Is the backend running on port 8001?');
+        throw new Error(
+          'No response from server. Is the backend running on port 8001?'
+        );
       }
     }
 

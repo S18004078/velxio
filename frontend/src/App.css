@@ -80,11 +80,32 @@ body {
 
 .editor-panel {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   flex-shrink: 0;
   overflow: hidden;
   min-width: 20%;
   max-width: 80%;
+}
+
+/* Toggle button for the file explorer sidebar */
+.explorer-toggle-btn {
+  width: 36px;
+  flex-shrink: 0;
+  background: #252526;
+  border: none;
+  border-right: 1px solid #333;
+  border-bottom: 1px solid #333;
+  color: #7a7a7a;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.1s, color 0.1s;
+}
+
+.explorer-toggle-btn:hover {
+  background: #2a2d2e;
+  color: #ccc;
 }
 
 .editor-wrapper {

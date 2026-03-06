@@ -2,14 +2,19 @@
  * Editor Page — main editor + simulator with resizable panels
  */
 
-import React, { useRef, useState, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useRef, useState, useCallback, useEffect } from 'react';
 import { CodeEditor } from '../components/editor/CodeEditor';
 import { EditorToolbar } from '../components/editor/EditorToolbar';
+import { FileTabs } from '../components/editor/FileTabs';
+import { FileExplorer } from '../components/editor/FileExplorer';
 import { CompilationConsole } from '../components/editor/CompilationConsole';
 import { SimulatorCanvas } from '../components/simulator/SimulatorCanvas';
 import { SerialMonitor } from '../components/simulator/SerialMonitor';
+import { AppHeader } from '../components/layout/AppHeader';
+import { SaveProjectModal } from '../components/layout/SaveProjectModal';
+import { LoginPromptModal } from '../components/layout/LoginPromptModal';
 import { useSimulatorStore } from '../store/useSimulatorStore';
+import { useAuthStore } from '../store/useAuthStore';
 import type { CompilationLog } from '../utils/compilationLogger';
 import '../App.css';
 
@@ -31,10 +36,33 @@ export const EditorPage: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const resizingRef = useRef(false);
   const serialMonitorOpen = useSimulatorStore((s) => s.serialMonitorOpen);
-  const toggleSerialMonitor = useSimulatorStore((s) => s.toggleSerialMonitor);
   const [consoleOpen, setConsoleOpen] = useState(false);
   const [compileLogs, setCompileLogs] = useState<CompilationLog[]>([]);
   const [bottomPanelHeight, setBottomPanelHeight] = useState(BOTTOM_PANEL_DEFAULT);
+  const [saveModalOpen, setSaveModalOpen] = useState(false);
+  const [loginPromptOpen, setLoginPromptOpen] = useState(false);
+  const [explorerOpen, setExplorerOpen] = useState(true);
+  const user = useAuthStore((s) => s.user);
+
+  const handleSaveClick = useCallback(() => {
+    if (!user) {
+      setLoginPromptOpen(true);
+    } else {
+      setSaveModalOpen(true);
+    }
+  }, [user]);
+
+  // Ctrl+S shortcut
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        handleSaveClick();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [handleSaveClick]);
 
   const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -84,77 +112,67 @@ export const EditorPage: React.FC = () => {
 
   return (
     <div className="app">
-      <header className="app-header">
-        <div className="header-content">
-          <div className="header-brand">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#007acc" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="5" y="5" width="14" height="14" rx="2" />
-              <rect x="9" y="9" width="6" height="6" />
-              <path d="M9 1v4M15 1v4M9 19v4M15 19v4M1 9h4M1 15h4M19 9h4M19 15h4" />
-            </svg>
-            <span className="header-title">Arduino Emulator</span>
-          </div>
-          <Link to="/examples" className="examples-link" title="Browse Examples">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
-              <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
-            </svg>
-            Examples
-          </Link>
-          <button
-            onClick={toggleSerialMonitor}
-            className="serial-monitor-toggle"
-            title="Toggle Serial Monitor"
-            style={{
-              background: serialMonitorOpen ? '#0e639c' : 'transparent',
-              border: '1px solid #555',
-              color: '#ccc',
-              padding: '4px 10px',
-              borderRadius: 4,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-              fontSize: 13,
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="2" y="3" width="20" height="14" rx="2" />
-              <path d="M8 21h8M12 17v4" />
-            </svg>
-            Serial
-          </button>
-        </div>
-      </header>
+      <AppHeader onSaveClick={handleSaveClick} />
 
       <div className="app-container" ref={containerRef}>
-        <div className="editor-panel" style={{ width: `${editorWidthPct}%`, display: 'flex', flexDirection: 'column' }}>
-          <EditorToolbar
-            consoleOpen={consoleOpen}
-            setConsoleOpen={setConsoleOpen}
-            compileLogs={compileLogs}
-            setCompileLogs={setCompileLogs}
-          />
-          <div className="editor-wrapper" style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
-            <CodeEditor />
-          </div>
-          {consoleOpen && (
-            <>
-              <div
-                onMouseDown={handleBottomPanelResizeMouseDown}
-                style={resizeHandleStyle}
-                title="Drag to resize"
-              />
-              <div style={{ height: bottomPanelHeight, flexShrink: 0 }}>
-                <CompilationConsole
-                  isOpen={consoleOpen}
-                  onClose={() => setConsoleOpen(false)}
-                  logs={compileLogs}
-                  onClear={() => setCompileLogs([])}
+        {/* ── Editor side ── */}
+        <div
+          className="editor-panel"
+          style={{ width: `${editorWidthPct}%`, display: 'flex', flexDirection: 'row' }}
+        >
+          {/* File explorer sidebar */}
+          {explorerOpen && <FileExplorer />}
+
+          {/* Editor main area */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+            {/* Explorer toggle + toolbar */}
+            <div style={{ display: 'flex', alignItems: 'stretch', flexShrink: 0 }}>
+              <button
+                className="explorer-toggle-btn"
+                onClick={() => setExplorerOpen((v) => !v)}
+                title={explorerOpen ? 'Hide file explorer' : 'Show file explorer'}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                </svg>
+              </button>
+              <div style={{ flex: 1 }}>
+                <EditorToolbar
+                  consoleOpen={consoleOpen}
+                  setConsoleOpen={setConsoleOpen}
+                  compileLogs={compileLogs}
+                  setCompileLogs={setCompileLogs}
                 />
               </div>
-            </>
-          )}
+            </div>
+
+            {/* File tabs */}
+            <FileTabs />
+
+            {/* Monaco editor */}
+            <div className="editor-wrapper" style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
+              <CodeEditor />
+            </div>
+
+            {/* Console */}
+            {consoleOpen && (
+              <>
+                <div
+                  onMouseDown={handleBottomPanelResizeMouseDown}
+                  style={resizeHandleStyle}
+                  title="Drag to resize"
+                />
+                <div style={{ height: bottomPanelHeight, flexShrink: 0 }}>
+                  <CompilationConsole
+                    isOpen={consoleOpen}
+                    onClose={() => setConsoleOpen(false)}
+                    logs={compileLogs}
+                    onClear={() => setCompileLogs([])}
+                  />
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
         {/* Resize handle */}
@@ -162,7 +180,11 @@ export const EditorPage: React.FC = () => {
           <div className="resize-handle-grip" />
         </div>
 
-        <div className="simulator-panel" style={{ width: `${100 - editorWidthPct}%`, display: 'flex', flexDirection: 'column' }}>
+        {/* ── Simulator side ── */}
+        <div
+          className="simulator-panel"
+          style={{ width: `${100 - editorWidthPct}%`, display: 'flex', flexDirection: 'column' }}
+        >
           <div style={{ flex: 1, overflow: 'hidden', position: 'relative', minHeight: 0 }}>
             <SimulatorCanvas />
           </div>
@@ -180,6 +202,9 @@ export const EditorPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      {saveModalOpen && <SaveProjectModal onClose={() => setSaveModalOpen(false)} />}
+      {loginPromptOpen && <LoginPromptModal onClose={() => setLoginPromptOpen(false)} />}
     </div>
   );
 };

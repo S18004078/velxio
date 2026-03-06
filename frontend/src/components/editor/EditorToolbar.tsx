@@ -15,7 +15,7 @@ interface EditorToolbarProps {
 }
 
 export const EditorToolbar = ({ consoleOpen, setConsoleOpen, compileLogs: _compileLogs, setCompileLogs }: EditorToolbarProps) => {
-  const { code } = useEditorStore();
+  const { files } = useEditorStore();
   const {
     boardType,
     setCompiledHex,
@@ -45,7 +45,8 @@ export const EditorToolbar = ({ consoleOpen, setConsoleOpen, compileLogs: _compi
     addLog({ timestamp: new Date(), type: 'info', message: `Starting compilation for ${boardLabel} (${fqbn})...` });
 
     try {
-      const result = await compileCode(code, fqbn);
+      const sketchFiles = files.map((f) => ({ name: f.name, content: f.content }));
+      const result = await compileCode(sketchFiles, fqbn);
 
       // Parse the full result into log entries
       const resultLogs = parseCompileResult(result, boardLabel);
