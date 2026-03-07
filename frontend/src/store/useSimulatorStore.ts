@@ -499,6 +499,22 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => {
           updated.end = { ...wire.end, x: endPos.x, y: endPos.y };
         }
 
+        // Auto-generate control points for wires that have none
+        // (e.g., wires loaded from examples or old saved projects).
+        // This ensures the rendered path and interactive segments use the
+        // same Z-shape routing, enabling proper segment dragging.
+        if (
+          updated.controlPoints.length === 0 &&
+          (updated.start.x !== 0 || updated.start.y !== 0) &&
+          (updated.end.x !== 0 || updated.end.y !== 0)
+        ) {
+          const midX = updated.start.x + (updated.end.x - updated.start.x) / 2;
+          updated.controlPoints = [
+            { id: `cp-${wire.id}-0`, x: midX, y: updated.start.y },
+            { id: `cp-${wire.id}-1`, x: midX, y: updated.end.y },
+          ];
+        }
+
         return updated;
       });
 
