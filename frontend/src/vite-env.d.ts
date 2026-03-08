@@ -23,5 +23,6 @@ declare namespace JSX {
     'wokwi-ir-receiver': any;
     'wokwi-pir-motion-sensor': any;
     'wokwi-photoresistor-sensor': any;
+    'wokwi-74hc595': any;
   }
 }

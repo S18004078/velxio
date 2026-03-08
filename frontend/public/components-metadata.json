@@ -701,6 +701,33 @@
       ]
     },
     {
+      "id": "74hc595",
+      "tagName": "wokwi-74hc595",
+      "name": "74HC595 Shift Register",
+      "category": "other",
+      "thumbnail": "<svg width=\"64\" height=\"64\" xmlns=\"http://www.w3.org/2000/svg\"><rect width=\"64\" height=\"64\" fill=\"#1a1a2e\" rx=\"4\"/><rect x=\"4\" y=\"16\" width=\"56\" height=\"30\" rx=\"2\" fill=\"#222\" stroke=\"#555\" stroke-width=\"0.8\"/><text x=\"32\" y=\"34\" text-anchor=\"middle\" font-size=\"7\" font-weight=\"bold\" fill=\"#eee\" font-family=\"monospace\">74HC595</text></svg>",
+      "properties": [
+        {
+          "name": "values",
+          "type": "number",
+          "defaultValue": [0, 0, 0, 0, 0, 0, 0, 0],
+          "control": "range"
+        }
+      ],
+      "defaultValues": {
+        "values": [0, 0, 0, 0, 0, 0, 0, 0]
+      },
+      "pinCount": 16,
+      "tags": [
+        "74hc595",
+        "shift register",
+        "ic",
+        "chip",
+        "74",
+        "595"
+      ]
+    },
+    {
       "id": "analog-joystick",
       "tagName": "wokwi-analog-joystick",
       "name": "Analog Joystick",
