@@ -159,8 +159,11 @@ export class AVRSimulator {
 
     // ATmega328P: 32 KB = 16 384 words.  ATmega2560: 256 KB = 131 072 words.
     const progWords = this.boardVariant === 'mega' ? 131072 : 16384;
-    // ATmega2560 has 8 KB SRAM; 328P has 2 KB but avr8js defaults 8 KB (safe over-alloc)
-    const sramBytes = this.boardVariant === 'mega' ? 8192 : 8192;
+    // ATmega2560 data space: 0x0000–0x21FF = 8704 bytes total.
+    // avr8js: data.length = sramBytes + registerSpace (0x100 = 256).
+    // So sramBytes must be >= 8704 − 256 = 8448 to fit RAMEND=0x21FF on the stack.
+    // ATmega328P RAMEND = 0x08FF; default 8192 is already a safe over-alloc.
+    const sramBytes = this.boardVariant === 'mega' ? 8448 : 8192;
 
     this.program = new Uint16Array(progWords);
     for (let i = 0; i < bytes.length; i += 2) {
@@ -377,7 +380,7 @@ export class AVRSimulator {
     this.stop();
     if (this.program) {
       // Re-use the stored hex content path: just reload
-      const sramBytes = this.boardVariant === 'mega' ? 8192 : 8192;
+      const sramBytes = this.boardVariant === 'mega' ? 8448 : 8192;
       console.log('Resetting AVR CPU...');
 
       this.cpu = new CPU(this.program, sramBytes);
