@@ -1018,6 +1018,8 @@ const SetupSection: React.FC = () => (
     </div>
   </div>
 );
+
+const SECTION_MAP: Record<SectionId, React.FC> = {
   intro: IntroSection,
   'getting-started': GettingStartedSection,
   emulator: EmulatorSection,
