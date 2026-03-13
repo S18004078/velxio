@@ -1,0 +1,94 @@
+name: Discord — New Issue Notification
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send issue to Discord
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_ISSUES }}
+        run: |
+          ISSUE_NUMBER="${{ github.event.issue.number }}"
+          ISSUE_TITLE="${{ github.event.issue.title }}"
+          ISSUE_URL="${{ github.event.issue.html_url }}"
+          ISSUE_BODY="${{ github.event.issue.body }}"
+          ISSUE_USER="${{ github.event.issue.user.login }}"
+          ISSUE_AVATAR="${{ github.event.issue.user.avatar_url }}"
+          REPO="${{ github.repository }}"
+
+          # Truncate body to 300 chars to keep embed clean
+          SHORT_BODY=$(echo "$ISSUE_BODY" | head -c 300)
+          if [ ${#ISSUE_BODY} -gt 300 ]; then
+            SHORT_BODY="${SHORT_BODY}..."
+          fi
+
+          # Build labels list (may be empty)
+          LABELS_JSON='${{ toJson(github.event.issue.labels) }}'
+          LABELS=$(echo "$LABELS_JSON" | python3 -c "
+          import json, sys
+          labels = json.load(sys.stdin)
+          if labels:
+              print(', '.join(f'\`{l[\"name\"]}\`' for l in labels))
+          else:
+              print('*(none)*')
+          " 2>/dev/null || echo "*(none)*")
+
+          # Discord embed payload
+          PAYLOAD=$(python3 -c "
+          import json, sys
+
+          payload = {
+            'embeds': [{
+              'title': f'🐛 Issue #{sys.argv[1]}: {sys.argv[2]}',
+              'url': sys.argv[3],
+              'description': sys.argv[4] if sys.argv[4].strip() else '*(no description)*',
+              'color': 0xE74C3C,
+              'fields': [
+                {
+                  'name': '📦 Repository',
+                  'value': f'[\`{sys.argv[7]}\`](https://github.com/{sys.argv[7]})',
+                  'inline': True
+                },
+                {
+                  'name': '🏷️ Labels',
+                  'value': sys.argv[6],
+                  'inline': True
+                }
+              ],
+              'author': {
+                'name': sys.argv[5],
+                'url': f'https://github.com/{sys.argv[5]}',
+                'icon_url': sys.argv[8]
+              },
+              'footer': {
+                'text': 'Velxio · GitHub Issues'
+              },
+              'timestamp': '${{ github.event.issue.created_at }}'
+            }]
+          }
+          print(json.dumps(payload))
+          " \
+            "$ISSUE_NUMBER" \
+            "$ISSUE_TITLE" \
+            "$ISSUE_URL" \
+            "$SHORT_BODY" \
+            "$ISSUE_USER" \
+            "$LABELS" \
+            "$REPO" \
+            "$ISSUE_AVATAR"
+          )
+
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Content-Type: application/json" \
+            -X POST \
+            -d "$PAYLOAD" \
+            "$DISCORD_WEBHOOK")
+
+          echo "Discord response: $HTTP_STATUS"
+          if [ "$HTTP_STATUS" -ne 204 ]; then
+            echo "::warning::Discord webhook returned $HTTP_STATUS"
+          fi
