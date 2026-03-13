@@ -8,79 +8,49 @@ jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
-      - name: Build Discord payload
-        env:
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-          ISSUE_TITLE: ${{ github.event.issue.title }}
-          ISSUE_URL: ${{ github.event.issue.html_url }}
-          ISSUE_BODY: ${{ github.event.issue.body }}
-          ISSUE_USER: ${{ github.event.issue.user.login }}
-          ISSUE_AVATAR: ${{ github.event.issue.user.avatar_url }}
-          ISSUE_CREATED_AT: ${{ github.event.issue.created_at }}
-          REPO: ${{ github.repository }}
-          LABELS_JSON: ${{ toJson(github.event.issue.labels) }}
-        run: |
-          python3 - <<'PYEOF'
-          import json, os
-
-          number     = os.environ["ISSUE_NUMBER"]
-          title      = os.environ["ISSUE_TITLE"]
-          url        = os.environ["ISSUE_URL"]
-          body       = os.environ.get("ISSUE_BODY") or ""
-          user       = os.environ["ISSUE_USER"]
-          avatar     = os.environ["ISSUE_AVATAR"]
-          repo       = os.environ["REPO"]
-          created_at = os.environ["ISSUE_CREATED_AT"]
-
-          short_body = body[:300] + ("..." if len(body) > 300 else "")
-          if not short_body.strip():
-              short_body = "*(no description)*"
-
-          try:
-              labels_raw = json.loads(os.environ.get("LABELS_JSON", "[]"))
-              labels = ", ".join(f"`{l['name']}`" for l in labels_raw) if labels_raw else "*(none)*"
-          except Exception:
-              labels = "*(none)*"
-
-          payload = {
-              "content": "@everyone 📢 **New issue reported on Velxio!**",
-              "embeds": [{
-                  "title": f"🐛 Issue #{number}: {title}",
-                  "url": url,
-                  "description": short_body,
-                  "color": 0xE74C3C,
-                  "fields": [
-                      {"name": "📦 Repository", "value": f"[`{repo}`](https://github.com/{repo})", "inline": True},
-                      {"name": "🏷️ Labels",    "value": labels, "inline": True}
-                  ],
-                  "author": {
-                      "name": user,
-                      "url": f"https://github.com/{user}",
-                      "icon_url": avatar
-                  },
-                  "footer": {"text": "Velxio · GitHub Issues"},
-                  "timestamp": created_at
-              }]
-          }
-
-          with open("/tmp/discord_payload.json", "w") as f:
-              json.dump(payload, f)
-          PYEOF
-
-      - name: Send to Discord
+      - name: Send issue to Discord
+        uses: actions/github-script@v7
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_ISSUES }}
-        run: |
-          HTTP_STATUS=$(curl -s -o /tmp/discord_response.txt -w "%{http_code}" \
-            -X POST \
-            -H "Content-Type: application/json" \
-            --data @/tmp/discord_payload.json \
-            "$DISCORD_WEBHOOK")
+        with:
+          script: |
+            const webhook = process.env.DISCORD_WEBHOOK;
+            const issue   = context.payload.issue;
 
-          echo "Discord response: $HTTP_STATUS"
-          cat /tmp/discord_response.txt
+            const body = (issue.body || '').slice(0, 300) + ((issue.body || '').length > 300 ? '...' : '');
+            const labels = issue.labels.length
+              ? issue.labels.map(l => `\`${l.name}\``).join(', ')
+              : '*(none)*';
 
-          if [ "$HTTP_STATUS" -ne 204 ]; then
-            echo "::error::Discord webhook failed with status $HTTP_STATUS"
-            exit 1
-          fi
+            const payload = {
+              content: '@everyone 📢 **New issue reported on Velxio!**',
+              embeds: [{
+                title: `🐛 Issue #${issue.number}: ${issue.title}`,
+                url: issue.html_url,
+                description: body || '*(no description)*',
+                color: 0xE74C3C,
+                fields: [
+                  { name: '📦 Repository', value: `[\`${context.repo.owner}/${context.repo.repo}\`](https://github.com/${context.repo.owner}/${context.repo.repo})`, inline: true },
+                  { name: '🏷️ Labels',    value: labels, inline: true }
+                ],
+                author: {
+                  name: issue.user.login,
+                  url: `https://github.com/${issue.user.login}`,
+                  icon_url: issue.user.avatar_url
+                },
+                footer: { text: 'Velxio · GitHub Issues' },
+                timestamp: issue.created_at
+              }]
+            };
+
+            const res = await fetch(webhook, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+
+            console.log(`Discord response: ${res.status}`);
+            if (!res.ok) {
+              const text = await res.text();
+              core.setFailed(`Discord webhook failed ${res.status}: ${text}`);
+            }
