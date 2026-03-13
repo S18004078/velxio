@@ -116,9 +116,30 @@ export const PI3_BCM_TO_PHYSICAL: Record<number, number> = Object.fromEntries(
     .map(([physical, bcm]) => [bcm, Number(physical)])
 );
 
+/**
+ * ESP32 DevKit-C GPIO pin names → GPIO numbers.
+ * Pin names are GPIO numbers directly (GPIO0–GPIO39).
+ * Special aliases: TX=1, RX=3.
+ */
+const ESP32_PIN_MAP: Record<string, number> = {
+  'TX': 1, 'RX': 3,
+  'GPIO0': 0, 'GPIO1': 1, 'GPIO2': 2, 'GPIO3': 3,
+  'GPIO4': 4, 'GPIO5': 5, 'GPIO6': 6, 'GPIO7': 7,
+  'GPIO8': 8, 'GPIO9': 9, 'GPIO10': 10, 'GPIO11': 11,
+  'GPIO12': 12, 'GPIO13': 13, 'GPIO14': 14, 'GPIO15': 15,
+  'GPIO16': 16, 'GPIO17': 17, 'GPIO18': 18, 'GPIO19': 19,
+  'GPIO20': 20, 'GPIO21': 21, 'GPIO22': 22, 'GPIO23': 23,
+  'GPIO25': 25, 'GPIO26': 26, 'GPIO27': 27,
+  'GPIO32': 32, 'GPIO33': 33, 'GPIO34': 34, 'GPIO35': 35,
+  'GPIO36': 36, 'GPIO39': 39,
+  // ADC aliases
+  'VP': 36, 'VN': 39,
+};
+
 /** All known board component IDs in the simulator */
 export const BOARD_COMPONENT_IDS = [
   'arduino-uno', 'arduino-nano', 'arduino-mega', 'nano-rp2040', 'raspberry-pi-3',
+  'esp32', 'esp32-s3', 'esp32-c3',
 ];
 
 /**
@@ -171,6 +192,14 @@ export function boardPinToNumber(boardId: string, pinName: string): number | nul
     const physical = parseInt(pinName, 10);
     if (!isNaN(physical)) return PI3_PHYSICAL_TO_BCM[physical] ?? null;
     return null;
+  }
+
+  // ESP32 / ESP32-S3 / ESP32-C3 — GPIO numbers used directly
+  if (boardId === 'esp32' || boardId.startsWith('esp32')) {
+    // Try bare number first ("13" → 13)
+    const num = parseInt(pinName, 10);
+    if (!isNaN(num) && num >= 0 && num <= 39) return num;
+    return ESP32_PIN_MAP[pinName] ?? null;
   }
 
   return null;

@@ -9,6 +9,8 @@ import type { BoardKind, BoardInstance } from '../types/board';
 import { calculatePinPosition } from '../utils/pinPositionCalculator';
 import { useOscilloscopeStore } from './useOscilloscopeStore';
 import { RaspberryPi3Bridge } from '../simulation/RaspberryPi3Bridge';
+import { Esp32Bridge } from '../simulation/Esp32Bridge';
+import { useEditorStore } from './useEditorStore';
 
 // ── Legacy type aliases (keep external consumers working) ──────────────────
 export type BoardType = 'arduino-uno' | 'arduino-nano' | 'arduino-mega' | 'raspberry-pi-pico';
@@ -34,10 +36,16 @@ export const ARDUINO_POSITION = DEFAULT_BOARD_POSITION;
 const simulatorMap = new Map<string, AVRSimulator | RP2040Simulator>();
 const pinManagerMap = new Map<string, PinManager>();
 const bridgeMap = new Map<string, RaspberryPi3Bridge>();
+const esp32BridgeMap = new Map<string, Esp32Bridge>();
 
 export const getBoardSimulator = (id: string) => simulatorMap.get(id);
 export const getBoardPinManager = (id: string) => pinManagerMap.get(id);
 export const getBoardBridge = (id: string) => bridgeMap.get(id);
+export const getEsp32Bridge = (id: string) => esp32BridgeMap.get(id);
+
+function isEsp32Kind(kind: BoardKind): kind is 'esp32' | 'esp32-s3' | 'esp32-c3' {
+  return kind === 'esp32' || kind === 'esp32-s3' || kind === 'esp32-c3';
+}
 
 // ── Component type ────────────────────────────────────────────────────────
 interface Component {
@@ -223,19 +231,35 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => {
       const pm = new PinManager();
       pinManagerMap.set(id, pm);
 
-      if (boardKind !== 'raspberry-pi-3') {
+      const serialCallback = (ch: string) => {
+        set((s) => {
+          const boards = s.boards.map((b) =>
+            b.id === id ? { ...b, serialOutput: b.serialOutput + ch } : b
+          );
+          const isActive = s.activeBoardId === id;
+          return { boards, ...(isActive ? { serialOutput: s.serialOutput + ch } : {}) };
+        });
+      };
+
+      if (boardKind === 'raspberry-pi-3') {
+        const bridge = new RaspberryPi3Bridge(id);
+        bridge.onSerialData = serialCallback;
+        bridge.onPinChange = (_gpioPin, _state) => {
+          // Cross-board routing handled in SimulatorCanvas
+        };
+        bridgeMap.set(id, bridge);
+      } else if (isEsp32Kind(boardKind)) {
+        const bridge = new Esp32Bridge(id, boardKind);
+        bridge.onSerialData = serialCallback;
+        bridge.onPinChange = (_gpioPin, _state) => {
+          // Cross-board routing handled in SimulatorCanvas
+        };
+        esp32BridgeMap.set(id, bridge);
+      } else {
         const sim = createSimulator(
           boardKind,
           pm,
-          (ch) => {
-            set((s) => {
-              const boards = s.boards.map((b) =>
-                b.id === id ? { ...b, serialOutput: b.serialOutput + ch } : b
-              );
-              const isActive = s.activeBoardId === id;
-              return { boards, ...(isActive ? { serialOutput: s.serialOutput + ch } : {}) };
-            });
-          },
+          serialCallback,
           (baud) => {
             set((s) => {
               const boards = s.boards.map((b) =>
@@ -248,21 +272,6 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => {
           getOscilloscopeCallback(),
         );
         simulatorMap.set(id, sim);
-      } else {
-        const bridge = new RaspberryPi3Bridge(id);
-        bridge.onSerialData = (ch) => {
-          set((s) => {
-            const boards = s.boards.map((b) =>
-              b.id === id ? { ...b, serialOutput: b.serialOutput + ch } : b
-            );
-            const isActive = s.activeBoardId === id;
-            return { boards, ...(isActive ? { serialOutput: s.serialOutput + ch } : {}) };
-          });
-        };
-        bridge.onPinChange = (_gpioPin, _state) => {
-          // Cross-board routing handled in SimulatorCanvas
-        };
-        bridgeMap.set(id, bridge);
       }
 
       const newBoard: BoardInstance = {
@@ -274,6 +283,8 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => {
       };
 
       set((s) => ({ boards: [...s.boards, newBoard] }));
+      // Create the editor file group for this board
+      useEditorStore.getState().createFileGroup(`group-${id}`);
       return id;
     },
 
@@ -283,6 +294,8 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => {
       pinManagerMap.delete(boardId);
       const bridge = getBoardBridge(boardId);
       if (bridge) { bridge.disconnect(); bridgeMap.delete(boardId); }
+      const esp32Bridge = getEsp32Bridge(boardId);
+      if (esp32Bridge) { esp32Bridge.disconnect(); esp32BridgeMap.delete(boardId); }
       set((s) => {
         const boards = s.boards.filter((b) => b.id !== boardId);
         const activeBoardId = s.activeBoardId === boardId
@@ -321,32 +334,40 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => {
         serialOutput: board.serialOutput,
         serialBaudRate: board.serialBaudRate,
         serialMonitorOpen: board.serialMonitorOpen,
-        remoteConnected: bridgeMap.get(boardId)?.connected ?? false,
+        remoteConnected: (bridgeMap.get(boardId)?.connected ?? esp32BridgeMap.get(boardId)?.connected) ?? false,
         remoteSocket: null,
       });
+      // Switch the editor to this board's file group
+      useEditorStore.getState().setActiveGroup(board.activeFileGroupId);
     },
 
     compileBoardProgram: (boardId: string, program: string) => {
       const board = get().boards.find((b) => b.id === boardId);
       if (!board) return;
 
-      const sim = getBoardSimulator(boardId);
-      if (sim && board.boardKind !== 'raspberry-pi-3') {
-        try {
-          if (sim instanceof AVRSimulator) {
-            sim.loadHex(program);
-            sim.addI2CDevice(new VirtualDS1307());
-            sim.addI2CDevice(new VirtualTempSensor());
-            sim.addI2CDevice(new I2CMemoryDevice(0x50));
-          } else if (sim instanceof RP2040Simulator) {
-            sim.loadBinary(program);
-            sim.addI2CDevice(new VirtualDS1307() as RP2040I2CDevice);
-            sim.addI2CDevice(new VirtualTempSensor() as RP2040I2CDevice);
-            sim.addI2CDevice(new I2CMemoryDevice(0x50) as RP2040I2CDevice);
+      if (isEsp32Kind(board.boardKind)) {
+        // For ESP32: program is base64-encoded .bin — send to QEMU via bridge
+        const esp32Bridge = getEsp32Bridge(boardId);
+        if (esp32Bridge) esp32Bridge.loadFirmware(program);
+      } else {
+        const sim = getBoardSimulator(boardId);
+        if (sim && board.boardKind !== 'raspberry-pi-3') {
+          try {
+            if (sim instanceof AVRSimulator) {
+              sim.loadHex(program);
+              sim.addI2CDevice(new VirtualDS1307());
+              sim.addI2CDevice(new VirtualTempSensor());
+              sim.addI2CDevice(new I2CMemoryDevice(0x50));
+            } else if (sim instanceof RP2040Simulator) {
+              sim.loadBinary(program);
+              sim.addI2CDevice(new VirtualDS1307() as RP2040I2CDevice);
+              sim.addI2CDevice(new VirtualTempSensor() as RP2040I2CDevice);
+              sim.addI2CDevice(new I2CMemoryDevice(0x50) as RP2040I2CDevice);
+            }
+          } catch (err) {
+            console.error(`compileBoardProgram(${boardId}):`, err);
+            return;
           }
-        } catch (err) {
-          console.error(`compileBoardProgram(${boardId}):`, err);
-          return;
         }
       }
 
@@ -367,11 +388,11 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => {
       if (!board) return;
 
       if (board.boardKind === 'raspberry-pi-3') {
-        const bridge = getBoardBridge(boardId);
-        if (bridge) bridge.connect();
+        getBoardBridge(boardId)?.connect();
+      } else if (isEsp32Kind(board.boardKind)) {
+        getEsp32Bridge(boardId)?.connect();
       } else {
-        const sim = getBoardSimulator(boardId);
-        if (sim) sim.start();
+        getBoardSimulator(boardId)?.start();
       }
 
       set((s) => {
@@ -389,6 +410,8 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => {
 
       if (board.boardKind === 'raspberry-pi-3') {
         getBoardBridge(boardId)?.disconnect();
+      } else if (isEsp32Kind(board.boardKind)) {
+        getEsp32Bridge(boardId)?.disconnect();
       } else {
         getBoardSimulator(boardId)?.stop();
       }
@@ -406,7 +429,7 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => {
       const board = get().boards.find((b) => b.id === boardId);
       if (!board) return;
 
-      if (board.boardKind !== 'raspberry-pi-3') {
+      if (board.boardKind !== 'raspberry-pi-3' && !isEsp32Kind(board.boardKind)) {
         const sim = getBoardSimulator(boardId);
         if (sim) {
           sim.reset();

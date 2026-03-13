@@ -1,0 +1,22 @@
+import './Esp32Element';
+
+interface Esp32Props {
+  id?: string;
+  x?: number;
+  y?: number;
+}
+
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      'wokwi-esp32': any;
+    }
+  }
+}
+
+export const Esp32 = ({ id = 'esp32', x = 0, y = 0 }: Esp32Props) => (
+  <wokwi-esp32
+    id={id}
+    style={{ position: 'absolute', left: `${x}px`, top: `${y}px` }}
+  />
+);

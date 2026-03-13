@@ -5,6 +5,7 @@ import { ArduinoNano } from '../components-wokwi/ArduinoNano';
 import { ArduinoMega } from '../components-wokwi/ArduinoMega';
 import { NanoRP2040 } from '../components-wokwi/NanoRP2040';
 import { RaspberryPi3 } from '../components-wokwi/RaspberryPi3';
+import { Esp32 } from '../components-wokwi/Esp32';
 import { PinOverlay } from './PinOverlay';
 
 // Board visual dimensions (width × height) for the drag-overlay sizing
@@ -14,6 +15,9 @@ const BOARD_SIZE: Record<string, { w: number; h: number }> = {
   'arduino-mega':  { w: 530, h: 195 },
   'raspberry-pi-pico': { w: 280, h: 180 },
   'raspberry-pi-3':    { w: 250, h: 160 },
+  'esp32':    { w: 280, h: 185 },
+  'esp32-s3': { w: 280, h: 185 },
+  'esp32-c3': { w: 260, h: 175 },
 };
 
 interface BoardOnCanvasProps {
@@ -46,6 +50,10 @@ export const BoardOnCanvas = ({
         return <NanoRP2040 id={id} x={x} y={y} ledBuiltIn={led13} />;
       case 'raspberry-pi-3':
         return <RaspberryPi3 id={id} x={x} y={y} />;
+      case 'esp32':
+      case 'esp32-s3':
+      case 'esp32-c3':
+        return <Esp32 id={id} x={x} y={y} />;
     }
   })();
 

@@ -8,6 +8,9 @@ const BOARD_DESCRIPTIONS: Record<BoardKind, string> = {
   'arduino-mega':      '8-bit AVR, 256KB flash, 54 digital I/O',
   'raspberry-pi-pico': 'RP2040 dual-core Cortex-M0+',
   'raspberry-pi-3':    'ARM64 Cortex-A53 quad-core, Linux/Python (QEMU)',
+  'esp32':    'Xtensa LX6 dual-core, WiFi+BT, 38 GPIO (QEMU)',
+  'esp32-s3': 'Xtensa LX7 dual-core, WiFi+BT, AI accel (QEMU)',
+  'esp32-c3': 'RISC-V single-core, WiFi+BLE, 22 GPIO (QEMU)',
 };
 
 const BOARD_ICON: Record<BoardKind, string> = {
@@ -16,6 +19,9 @@ const BOARD_ICON: Record<BoardKind, string> = {
   'arduino-mega':      '▬',
   'raspberry-pi-pico': '◆',
   'raspberry-pi-3':    '⬛',
+  'esp32':    '⬡',
+  'esp32-s3': '⬡',
+  'esp32-c3': '⬡',
 };
 
 interface BoardPickerModalProps {
@@ -26,6 +32,7 @@ interface BoardPickerModalProps {
 
 const BOARDS: BoardKind[] = [
   'arduino-uno', 'arduino-nano', 'arduino-mega', 'raspberry-pi-pico', 'raspberry-pi-3',
+  'esp32', 'esp32-s3', 'esp32-c3',
 ];
 
 export const BoardPickerModal = ({ isOpen, onClose, onSelectBoard }: BoardPickerModalProps) => {
@@ -63,7 +70,7 @@ export const BoardPickerModal = ({ isOpen, onClose, onSelectBoard }: BoardPicker
               onMouseEnter={(e) => (e.currentTarget.style.background = '#3a3a3a')}
               onMouseLeave={(e) => (e.currentTarget.style.background = '#2d2d2d')}
             >
-              <span style={{ fontSize: 20, width: 28, textAlign: 'center', color: kind.startsWith('raspberry') ? '#c22' : '#4af' }}>
+              <span style={{ fontSize: 20, width: 28, textAlign: 'center', color: kind.startsWith('raspberry') ? '#c22' : kind.startsWith('esp') ? '#e8a020' : '#4af' }}>
                 {BOARD_ICON[kind]}
               </span>
               <div>

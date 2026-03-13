@@ -3,7 +3,10 @@ export type BoardKind =
   | 'arduino-nano'
   | 'arduino-mega'
   | 'raspberry-pi-pico'   // RP2040, browser emulation
-  | 'raspberry-pi-3';     // QEMU ARM64, backend
+  | 'raspberry-pi-3'      // QEMU ARM64, backend
+  | 'esp32'               // Xtensa LX6, QEMU backend
+  | 'esp32-s3'            // Xtensa LX7, QEMU backend
+  | 'esp32-c3';           // RISC-V, QEMU backend
 
 export interface BoardInstance {
   id: string;                   // unique in canvas, e.g. 'arduino-uno', 'raspberry-pi-3'
@@ -24,6 +27,9 @@ export const BOARD_KIND_LABELS: Record<BoardKind, string> = {
   'arduino-mega': 'Arduino Mega 2560',
   'raspberry-pi-pico': 'Raspberry Pi Pico',
   'raspberry-pi-3': 'Raspberry Pi 3B',
+  'esp32': 'ESP32 DevKit',
+  'esp32-s3': 'ESP32-S3 DevKit',
+  'esp32-c3': 'ESP32-C3 DevKit',
 };
 
 export const BOARD_KIND_FQBN: Record<BoardKind, string | null> = {
@@ -31,5 +37,8 @@ export const BOARD_KIND_FQBN: Record<BoardKind, string | null> = {
   'arduino-nano': 'arduino:avr:nano:cpu=atmega328',
   'arduino-mega': 'arduino:avr:mega',
   'raspberry-pi-pico': 'rp2040:rp2040:rpipico',
-  'raspberry-pi-3': null,  // compiled/run by QEMU, no arduino-cli
+  'raspberry-pi-3': null,   // compiled/run by QEMU, no arduino-cli
+  'esp32': 'esp32:esp32:esp32',
+  'esp32-s3': 'esp32:esp32:esp32s3',
+  'esp32-c3': 'esp32:esp32:esp32c3',
 };

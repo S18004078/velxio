@@ -205,6 +205,10 @@ class ArduinoCLIService:
         """Return True if the FQBN targets an RP2040/RP2350 board."""
         return any(p in fqbn for p in ("rp2040", "rp2350", "mbed_rp2040", "mbed_rp2350"))
 
+    def _is_esp32_board(self, fqbn: str) -> bool:
+        """Return True if the FQBN targets an ESP32 family board."""
+        return fqbn.startswith("esp32:")
+
     async def compile(self, files: list[dict], board_fqbn: str = "arduino:avr:uno") -> dict:
         """
         Compile Arduino sketch using arduino-cli.
@@ -311,6 +315,36 @@ class ArduinoCLIService:
                             return {
                                 "success": False,
                                 "error": "RP2040 binary (.bin/.uf2) not found after compilation",
+                                "stdout": result.stdout,
+                                "stderr": result.stderr
+                            }
+                    elif self._is_esp32_board(board_fqbn):
+                        # ESP32 outputs a merged flash .bin file
+                        # arduino-cli places it as sketch.ino.bin
+                        bin_file = build_dir / "sketch.ino.bin"
+                        # Some versions use a merged-flash variant
+                        merged_file = build_dir / "sketch.ino.merged.bin"
+                        target_file = merged_file if merged_file.exists() else (bin_file if bin_file.exists() else None)
+
+                        if target_file:
+                            raw_bytes = target_file.read_bytes()
+                            binary_b64 = base64.b64encode(raw_bytes).decode('ascii')
+                            print(f"[ESP32] Binary file: {target_file.name}, size: {len(raw_bytes)} bytes")
+                            print("=== ESP32 Compilation successful ===\n")
+                            return {
+                                "success": True,
+                                "hex_content": None,
+                                "binary_content": binary_b64,
+                                "binary_type": "bin",
+                                "stdout": result.stdout,
+                                "stderr": result.stderr
+                            }
+                        else:
+                            print(f"[ESP32] Binary file not found. Files: {list(build_dir.iterdir())}")
+                            print("=== ESP32 Compilation failed: binary not found ===\n")
+                            return {
+                                "success": False,
+                                "error": "ESP32 binary (.bin) not found after compilation",
                                 "stdout": result.stdout,
                                 "stderr": result.stderr
                             }
