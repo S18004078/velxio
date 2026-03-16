@@ -458,6 +458,93 @@
 }
 
 /* ── Boards ───────────────────────────────────────────── */
+/* ── Board groups ─────────────────────────────────────── */
+.board-group {
+  margin-bottom: 28px;
+}
+
+.board-group-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.board-group-engine {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--grp-color, #007acc) 15%, transparent);
+  color: var(--grp-color, #007acc);
+  border: 1px solid color-mix(in srgb, var(--grp-color, #007acc) 35%, transparent);
+  white-space: nowrap;
+}
+
+.board-group-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.boards-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.board-card-sm {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 130px;
+  max-width: 160px;
+  transition: border-color 0.2s, transform 0.15s;
+  cursor: default;
+}
+
+.board-card-sm:hover {
+  border-color: var(--border-hi);
+  transform: translateY(-2px);
+}
+
+.board-name-sm {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  text-align: center;
+  line-height: 1.3;
+}
+
+.board-chip-sm {
+  font-size: 10px;
+  font-family: var(--mono);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.board-img-sm {
+  width: 80px;
+  height: auto;
+  max-height: 110px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.4));
+}
+
+.board-img-tall {
+  max-height: 140px;
+}
+
+/* ── Legacy boards-grid (kept for compat) ─────────────── */
 .boards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
@@ -548,6 +635,16 @@
   transform-origin: top left;
 }
 
+/* Compact sizes for board-card-sm (130-160px wide) */
+.board-card-sm .board-element-uno  { width: 120px; height: 88px; overflow: hidden; }
+.board-card-sm .board-element-uno > wokwi-arduino-uno  { display: block; transform: scale(0.44); transform-origin: top left; }
+.board-card-sm .board-element-nano { width: 120px; height: 48px; overflow: hidden; }
+.board-card-sm .board-element-nano > wokwi-arduino-nano { display: block; transform: scale(0.71); transform-origin: top left; }
+.board-card-sm .board-element-mega { width: 120px; height: 59px; overflow: hidden; }
+.board-card-sm .board-element-mega > wokwi-arduino-mega { display: block; transform: scale(0.31); transform-origin: top left; }
+.board-card-sm .board-element-esp32 { width: 60px; height: 112px; overflow: hidden; }
+.board-card-sm .board-element-esp32 > wokwi-esp32-devkit-v1 { display: block; transform: scale(0.56); transform-origin: top left; }
+
 .board-info {
   display: flex;
   flex-direction: column;
@@ -568,6 +665,45 @@
   font-size: 11px;
   font-family: var(--mono);
   color: var(--text-muted);
+}
+
+.board-badge {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--mono);
+  letter-spacing: 0.4px;
+}
+
+/* ESP32 devkit: 28.2×54mm → ~107×204px → scale 0.98 → 105×200px */
+.board-element-esp32 {
+  width: 105px;
+  height: 200px;
+  overflow: hidden;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
+  flex-shrink: 0;
+}
+.board-element-esp32 > wokwi-esp32-devkit-v1 {
+  display: block;
+  transform: scale(0.98);
+  transform-origin: top left;
+}
+
+/* Raspberry Pi 3 image */
+.board-img-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
+}
+.board-img-pi3 {
+  width: 180px;
+  height: auto;
+  max-height: 130px;
+  object-fit: contain;
 }
 
 /* ── Features ─────────────────────────────────────────── */

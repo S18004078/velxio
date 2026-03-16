@@ -23,7 +23,9 @@ export interface ExampleProject {
   category: 'basics' | 'sensors' | 'displays' | 'communication' | 'games' | 'robotics';
   difficulty: 'beginner' | 'intermediate' | 'advanced';
   /** Target board — defaults to 'arduino-uno' if omitted. Ignored when boards[] is set. */
-  boardType?: 'arduino-uno' | 'arduino-nano' | 'raspberry-pi-pico' | 'esp32';
+  boardType?: 'arduino-uno' | 'arduino-nano' | 'arduino-mega' | 'raspberry-pi-pico' | 'esp32' | 'esp32-c3';
+  /** Board filter key used in the gallery board selector. Derived from boardType if omitted. */
+  boardFilter?: string;
   /**
    * Multi-board setup. When present, ALL boards are replaced with these entries.
    * Board instance IDs are deterministic: first board of a kind uses boardKind as its ID.
@@ -2195,6 +2197,854 @@ void processCommand(const String& cmd) {
       { id: 'w-led2-sig', start: { componentId: 'arduino-uno', pinName: '9' },  end: { componentId: 'res2', pinName: '1' }, color: '#22cc22' },
       { id: 'w-led2-mid', start: { componentId: 'res2', pinName: '2' },          end: { componentId: 'led2', pinName: 'A'  }, color: '#22cc22' },
       { id: 'w-led2-gnd', start: { componentId: 'led2', pinName: 'C' },          end: { componentId: 'arduino-uno', pinName: 'GND' }, color: '#000000' },
+    ],
+  },
+
+  // ─── Arduino Nano Examples ────────────────────────────────────────────────
+  {
+    id: 'nano-blink',
+    title: 'Nano: Blink LED',
+    description: 'Blink the built-in LED on pin 13 of the Arduino Nano.',
+    category: 'basics',
+    difficulty: 'beginner',
+    boardType: 'arduino-nano',
+    boardFilter: 'arduino-nano',
+    code: `// Arduino Nano — Blink LED
+// Built-in LED is on pin 13
+
+void setup() {
+  pinMode(13, OUTPUT);
+  Serial.begin(9600);
+  Serial.println("Nano Blink ready!");
+}
+
+void loop() {
+  digitalWrite(13, HIGH);
+  Serial.println("ON");
+  delay(500);
+  digitalWrite(13, LOW);
+  Serial.println("OFF");
+  delay(500);
+}`,
+    components: [],
+    wires: [],
+  },
+  {
+    id: 'nano-serial',
+    title: 'Nano: Serial Hello',
+    description: 'Print Hello World and uptime every second from Arduino Nano via Serial.',
+    category: 'communication',
+    difficulty: 'beginner',
+    boardType: 'arduino-nano',
+    boardFilter: 'arduino-nano',
+    code: `// Arduino Nano — Serial Hello World
+
+void setup() {
+  Serial.begin(9600);
+  delay(200);
+  Serial.println("=== Arduino Nano Serial Demo ===");
+  Serial.println("Hello from Nano!");
+  Serial.println();
+}
+
+unsigned long lastPrint = 0;
+int count = 0;
+
+void loop() {
+  if (millis() - lastPrint >= 1000) {
+    lastPrint = millis();
+    count++;
+    Serial.print("Uptime: ");
+    Serial.print(millis() / 1000);
+    Serial.print("s  |  Loop #");
+    Serial.println(count);
+  }
+}`,
+    components: [],
+    wires: [],
+  },
+  {
+    id: 'nano-button-led',
+    title: 'Nano: Button + LED',
+    description: 'Press a button on pin 2 to light up an LED on pin 13 on the Arduino Nano.',
+    category: 'basics',
+    difficulty: 'beginner',
+    boardType: 'arduino-nano',
+    boardFilter: 'arduino-nano',
+    code: `// Arduino Nano — Button controls LED
+
+const int BTN = 2;
+const int LED = 13;
+
+void setup() {
+  pinMode(BTN, INPUT_PULLUP);
+  pinMode(LED, OUTPUT);
+  Serial.begin(9600);
+  Serial.println("Button LED ready — press button on pin 2");
+}
+
+void loop() {
+  bool pressed = digitalRead(BTN) == LOW;
+  digitalWrite(LED, pressed ? HIGH : LOW);
+}`,
+    components: [
+      { type: 'wokwi-pushbutton', id: 'btn1', x: 420, y: 120, properties: {} },
+      { type: 'wokwi-led', id: 'led1', x: 420, y: 260, properties: { color: 'red' } },
+    ],
+    wires: [
+      { id: 'w-btn', start: { componentId: 'arduino-uno', pinName: '2' }, end: { componentId: 'btn1', pinName: '1a' }, color: '#00aaff' },
+      { id: 'w-led', start: { componentId: 'arduino-uno', pinName: '13' }, end: { componentId: 'led1', pinName: 'A' }, color: '#ff4444' },
+    ],
+  },
+  {
+    id: 'nano-fade',
+    title: 'Nano: PWM Fade',
+    description: 'Fade an LED in and out using PWM on pin 9 of the Arduino Nano.',
+    category: 'basics',
+    difficulty: 'beginner',
+    boardType: 'arduino-nano',
+    boardFilter: 'arduino-nano',
+    code: `// Arduino Nano — PWM LED Fade
+
+const int LED_PIN = 9;  // PWM pin
+
+void setup() {
+  pinMode(LED_PIN, OUTPUT);
+  Serial.begin(9600);
+  Serial.println("Nano PWM Fade demo");
+}
+
+void loop() {
+  // Fade in
+  for (int b = 0; b <= 255; b += 5) {
+    analogWrite(LED_PIN, b);
+    delay(10);
+  }
+  // Fade out
+  for (int b = 255; b >= 0; b -= 5) {
+    analogWrite(LED_PIN, b);
+    delay(10);
+  }
+}`,
+    components: [
+      { type: 'wokwi-led', id: 'led-fade', x: 420, y: 160, properties: { color: 'blue' } },
+      { type: 'wokwi-resistor', id: 'r-fade', x: 420, y: 240, properties: { resistance: '220' } },
+    ],
+    wires: [
+      { id: 'w-fade', start: { componentId: 'arduino-uno', pinName: '9' }, end: { componentId: 'led-fade', pinName: 'A' }, color: '#2244ff' },
+      { id: 'w-fade-r', start: { componentId: 'led-fade', pinName: 'C' }, end: { componentId: 'r-fade', pinName: '1' }, color: '#888888' },
+    ],
+  },
+
+  // ─── Arduino Mega Examples ────────────────────────────────────────────────
+  {
+    id: 'mega-blink',
+    title: 'Mega: Blink LED',
+    description: 'Blink the built-in LED on pin 13 of the Arduino Mega 2560.',
+    category: 'basics',
+    difficulty: 'beginner',
+    boardType: 'arduino-mega' as any,
+    boardFilter: 'arduino-mega',
+    code: `// Arduino Mega 2560 — Blink LED
+
+void setup() {
+  pinMode(13, OUTPUT);
+  Serial.begin(9600);
+  Serial.println("Mega Blink ready!");
+}
+
+void loop() {
+  digitalWrite(13, HIGH);
+  Serial.println("LED ON");
+  delay(500);
+  digitalWrite(13, LOW);
+  Serial.println("LED OFF");
+  delay(500);
+}`,
+    components: [],
+    wires: [],
+  },
+  {
+    id: 'mega-serial',
+    title: 'Mega: Serial Hello',
+    description: 'Hello World via Serial on Arduino Mega — tests all 4 UART ports.',
+    category: 'communication',
+    difficulty: 'beginner',
+    boardType: 'arduino-mega' as any,
+    boardFilter: 'arduino-mega',
+    code: `// Arduino Mega — Serial Hello World
+// Mega has 4 hardware UARTs: Serial, Serial1, Serial2, Serial3
+
+void setup() {
+  Serial.begin(9600);
+  delay(200);
+  Serial.println("=== Arduino Mega Serial Demo ===");
+  Serial.println("Hello from Mega 2560!");
+  Serial.print("Flash: 256 KB | RAM: 8 KB | CPU: ATmega2560 @ 16 MHz");
+  Serial.println();
+}
+
+int counter = 0;
+
+void loop() {
+  delay(1000);
+  counter++;
+  Serial.print("[");
+  Serial.print(counter);
+  Serial.print("] Uptime: ");
+  Serial.print(millis() / 1000);
+  Serial.println("s");
+}`,
+    components: [],
+    wires: [],
+  },
+  {
+    id: 'mega-led-chase',
+    title: 'Mega: 8-LED Chase',
+    description: 'Knight-Rider style LED chase across 8 LEDs on pins 2–9. Shows off the Mega\'s many I/O pins.',
+    category: 'basics',
+    difficulty: 'beginner',
+    boardType: 'arduino-mega' as any,
+    boardFilter: 'arduino-mega',
+    code: `// Arduino Mega — 8-LED Knight Rider Chase
+
+const int LEDS[] = {2, 3, 4, 5, 6, 7, 8, 9};
+const int N = 8;
+
+void setup() {
+  for (int i = 0; i < N; i++) {
+    pinMode(LEDS[i], OUTPUT);
+  }
+  Serial.begin(9600);
+  Serial.println("Mega LED Chase ready!");
+}
+
+void loop() {
+  // Chase forward
+  for (int i = 0; i < N; i++) {
+    digitalWrite(LEDS[i], HIGH);
+    delay(80);
+    digitalWrite(LEDS[i], LOW);
+  }
+  // Chase backward
+  for (int i = N - 2; i > 0; i--) {
+    digitalWrite(LEDS[i], HIGH);
+    delay(80);
+    digitalWrite(LEDS[i], LOW);
+  }
+}`,
+    components: [
+      { type: 'wokwi-led', id: 'led2', x: 420, y:  80, properties: { color: 'red' } },
+      { type: 'wokwi-led', id: 'led3', x: 460, y:  80, properties: { color: 'orange' } },
+      { type: 'wokwi-led', id: 'led4', x: 500, y:  80, properties: { color: 'yellow' } },
+      { type: 'wokwi-led', id: 'led5', x: 540, y:  80, properties: { color: 'green' } },
+      { type: 'wokwi-led', id: 'led6', x: 580, y:  80, properties: { color: 'blue' } },
+      { type: 'wokwi-led', id: 'led7', x: 620, y:  80, properties: { color: 'purple' } },
+      { type: 'wokwi-led', id: 'led8', x: 660, y:  80, properties: { color: 'white' } },
+      { type: 'wokwi-led', id: 'led9', x: 700, y:  80, properties: { color: 'red' } },
+    ],
+    wires: [
+      { id: 'w2', start: { componentId: 'arduino-uno', pinName: '2' }, end: { componentId: 'led2', pinName: 'A' }, color: '#ff2222' },
+      { id: 'w3', start: { componentId: 'arduino-uno', pinName: '3' }, end: { componentId: 'led3', pinName: 'A' }, color: '#ff8800' },
+      { id: 'w4', start: { componentId: 'arduino-uno', pinName: '4' }, end: { componentId: 'led4', pinName: 'A' }, color: '#ffcc00' },
+      { id: 'w5', start: { componentId: 'arduino-uno', pinName: '5' }, end: { componentId: 'led5', pinName: 'A' }, color: '#22bb22' },
+      { id: 'w6', start: { componentId: 'arduino-uno', pinName: '6' }, end: { componentId: 'led6', pinName: 'A' }, color: '#2244ff' },
+      { id: 'w7', start: { componentId: 'arduino-uno', pinName: '7' }, end: { componentId: 'led7', pinName: 'A' }, color: '#aa44ff' },
+      { id: 'w8', start: { componentId: 'arduino-uno', pinName: '8' }, end: { componentId: 'led8', pinName: 'A' }, color: '#ffffff' },
+      { id: 'w9', start: { componentId: 'arduino-uno', pinName: '9' }, end: { componentId: 'led9', pinName: 'A' }, color: '#ff2222' },
+    ],
+  },
+  {
+    id: 'mega-serial-control',
+    title: 'Mega: Serial LED Control',
+    description: 'Send \'1\'–\'8\' over Serial to toggle individual LEDs on the Arduino Mega.',
+    category: 'communication',
+    difficulty: 'intermediate',
+    boardType: 'arduino-mega' as any,
+    boardFilter: 'arduino-mega',
+    code: `// Arduino Mega — Serial-controlled LEDs
+// Send '1' through '8' to toggle individual LEDs on pins 2-9
+// Send 'a' to turn all on, 'x' to turn all off
+
+const int LEDS[] = {2, 3, 4, 5, 6, 7, 8, 9};
+const int N = 8;
+bool states[8] = {false};
+
+void setup() {
+  for (int i = 0; i < N; i++) {
+    pinMode(LEDS[i], OUTPUT);
+  }
+  Serial.begin(9600);
+  Serial.println("=== Mega LED Controller ===");
+  Serial.println("Send 1-8 to toggle LEDs");
+  Serial.println("Send 'a' = all ON, 'x' = all OFF");
+}
+
+void loop() {
+  if (Serial.available()) {
+    char c = Serial.read();
+    if (c >= '1' && c <= '8') {
+      int idx = c - '1';
+      states[idx] = !states[idx];
+      digitalWrite(LEDS[idx], states[idx] ? HIGH : LOW);
+      Serial.print("LED "); Serial.print(idx+1);
+      Serial.println(states[idx] ? " ON" : " OFF");
+    } else if (c == 'a') {
+      for (int i = 0; i < N; i++) { states[i] = true; digitalWrite(LEDS[i], HIGH); }
+      Serial.println("All LEDs ON");
+    } else if (c == 'x') {
+      for (int i = 0; i < N; i++) { states[i] = false; digitalWrite(LEDS[i], LOW); }
+      Serial.println("All LEDs OFF");
+    }
+  }
+}`,
+    components: [
+      { type: 'wokwi-led', id: 'mled2', x: 420, y:  80, properties: { color: 'red' } },
+      { type: 'wokwi-led', id: 'mled3', x: 460, y:  80, properties: { color: 'orange' } },
+      { type: 'wokwi-led', id: 'mled4', x: 500, y:  80, properties: { color: 'yellow' } },
+      { type: 'wokwi-led', id: 'mled5', x: 540, y:  80, properties: { color: 'green' } },
+      { type: 'wokwi-led', id: 'mled6', x: 580, y:  80, properties: { color: 'blue' } },
+      { type: 'wokwi-led', id: 'mled7', x: 620, y:  80, properties: { color: 'purple' } },
+      { type: 'wokwi-led', id: 'mled8', x: 660, y:  80, properties: { color: 'white' } },
+      { type: 'wokwi-led', id: 'mled9', x: 700, y:  80, properties: { color: 'red' } },
+    ],
+    wires: [
+      { id: 'mw2', start: { componentId: 'arduino-uno', pinName: '2' }, end: { componentId: 'mled2', pinName: 'A' }, color: '#ff2222' },
+      { id: 'mw3', start: { componentId: 'arduino-uno', pinName: '3' }, end: { componentId: 'mled3', pinName: 'A' }, color: '#ff8800' },
+      { id: 'mw4', start: { componentId: 'arduino-uno', pinName: '4' }, end: { componentId: 'mled4', pinName: 'A' }, color: '#ffcc00' },
+      { id: 'mw5', start: { componentId: 'arduino-uno', pinName: '5' }, end: { componentId: 'mled5', pinName: 'A' }, color: '#22bb22' },
+      { id: 'mw6', start: { componentId: 'arduino-uno', pinName: '6' }, end: { componentId: 'mled6', pinName: 'A' }, color: '#2244ff' },
+      { id: 'mw7', start: { componentId: 'arduino-uno', pinName: '7' }, end: { componentId: 'mled7', pinName: 'A' }, color: '#aa44ff' },
+      { id: 'mw8', start: { componentId: 'arduino-uno', pinName: '8' }, end: { componentId: 'mled8', pinName: 'A' }, color: '#ffffff' },
+      { id: 'mw9', start: { componentId: 'arduino-uno', pinName: '9' }, end: { componentId: 'mled9', pinName: 'A' }, color: '#ff2222' },
+    ],
+  },
+
+  // ─── ESP32-C3 (RISC-V browser emulator) Examples ──────────────────────────
+  {
+    id: 'c3-blink',
+    title: 'ESP32-C3: Blink LED',
+    description: 'Blink an LED on GPIO 8 of the ESP32-C3. Runs entirely in the browser via the RISC-V emulator — no backend needed.',
+    category: 'basics',
+    difficulty: 'beginner',
+    boardType: 'esp32-c3',
+    boardFilter: 'esp32-c3',
+    code: `// ESP32-C3 — Blink LED on GPIO 8
+// Runs in-browser via RV32IMC emulator (Esp32C3Simulator)
+
+#define LED_PIN 8
+
+void setup() {
+  pinMode(LED_PIN, OUTPUT);
+  Serial.begin(115200);
+  Serial.println("ESP32-C3 Blink ready!");
+}
+
+void loop() {
+  digitalWrite(LED_PIN, HIGH);
+  Serial.println("LED ON");
+  delay(500);
+  digitalWrite(LED_PIN, LOW);
+  Serial.println("LED OFF");
+  delay(500);
+}`,
+    components: [
+      { type: 'wokwi-led', id: 'c3-led1', x: 440, y: 160, properties: { color: 'green' } },
+      { type: 'wokwi-resistor', id: 'c3-r1', x: 440, y: 240, properties: { resistance: '220' } },
+    ],
+    wires: [
+      { id: 'c3w1', start: { componentId: 'esp32-c3', pinName: '8' }, end: { componentId: 'c3-led1', pinName: 'A' }, color: '#22cc22' },
+      { id: 'c3w2', start: { componentId: 'c3-led1', pinName: 'C' }, end: { componentId: 'c3-r1', pinName: '1' }, color: '#888888' },
+    ],
+  },
+  {
+    id: 'c3-serial',
+    title: 'ESP32-C3: Serial Hello',
+    description: 'Print Hello World and a heartbeat every second from ESP32-C3 via Serial. Runs in the browser.',
+    category: 'communication',
+    difficulty: 'beginner',
+    boardType: 'esp32-c3',
+    boardFilter: 'esp32-c3',
+    code: `// ESP32-C3 — Serial Hello World
+// Open Serial Monitor at 115200 baud
+
+void setup() {
+  Serial.begin(115200);
+  delay(200);
+  Serial.println("=== ESP32-C3 Serial Demo ===");
+  Serial.println("RV32IMC @ 160 MHz — browser emulator");
+  Serial.println();
+}
+
+int tick = 0;
+
+void loop() {
+  delay(1000);
+  tick++;
+  Serial.print("[");
+  Serial.print(tick);
+  Serial.print("] Uptime: ");
+  Serial.print(millis() / 1000);
+  Serial.println("s");
+}`,
+    components: [],
+    wires: [],
+  },
+  {
+    id: 'c3-rgb',
+    title: 'ESP32-C3: RGB LED',
+    description: 'Cycle through red, green, and blue on an RGB LED using GPIO 6, 7, 8 on the ESP32-C3.',
+    category: 'basics',
+    difficulty: 'beginner',
+    boardType: 'esp32-c3',
+    boardFilter: 'esp32-c3',
+    code: `// ESP32-C3 — RGB LED color cycle
+// R=GPIO6  G=GPIO7  B=GPIO8
+
+#define R_PIN 6
+#define G_PIN 7
+#define B_PIN 8
+
+void setup() {
+  pinMode(R_PIN, OUTPUT);
+  pinMode(G_PIN, OUTPUT);
+  pinMode(B_PIN, OUTPUT);
+  Serial.begin(115200);
+  Serial.println("ESP32-C3 RGB LED demo");
+}
+
+void setRGB(bool r, bool g, bool b) {
+  digitalWrite(R_PIN, r ? HIGH : LOW);
+  digitalWrite(G_PIN, g ? HIGH : LOW);
+  digitalWrite(B_PIN, b ? HIGH : LOW);
+}
+
+void loop() {
+  setRGB(1,0,0); Serial.println("RED");   delay(600);
+  setRGB(0,1,0); Serial.println("GREEN"); delay(600);
+  setRGB(0,0,1); Serial.println("BLUE");  delay(600);
+  setRGB(1,1,0); Serial.println("YELLOW");delay(600);
+  setRGB(0,1,1); Serial.println("CYAN");  delay(600);
+  setRGB(1,0,1); Serial.println("MAGENTA");delay(600);
+  setRGB(1,1,1); Serial.println("WHITE"); delay(600);
+  setRGB(0,0,0); Serial.println("OFF");   delay(300);
+}`,
+    components: [
+      { type: 'wokwi-rgb-led', id: 'c3-rgb1', x: 440, y: 160, properties: {} },
+    ],
+    wires: [
+      { id: 'c3-rw1', start: { componentId: 'esp32-c3', pinName: '6' }, end: { componentId: 'c3-rgb1', pinName: 'R' }, color: '#ff2222' },
+      { id: 'c3-rw2', start: { componentId: 'esp32-c3', pinName: '7' }, end: { componentId: 'c3-rgb1', pinName: 'G' }, color: '#22cc22' },
+      { id: 'c3-rw3', start: { componentId: 'esp32-c3', pinName: '8' }, end: { componentId: 'c3-rgb1', pinName: 'B' }, color: '#2244ff' },
+    ],
+  },
+  {
+    id: 'c3-button',
+    title: 'ESP32-C3: Button + LED',
+    description: 'Press a button on GPIO 9 to toggle an LED on GPIO 8. Tests GPIO input on the browser ESP32-C3 emulator.',
+    category: 'basics',
+    difficulty: 'beginner',
+    boardType: 'esp32-c3',
+    boardFilter: 'esp32-c3',
+    code: `// ESP32-C3 — Button controls LED
+// Button on GPIO9 (INPUT_PULLUP), LED on GPIO8
+
+#define BTN_PIN 9
+#define LED_PIN 8
+
+void setup() {
+  pinMode(BTN_PIN, INPUT_PULLUP);
+  pinMode(LED_PIN, OUTPUT);
+  Serial.begin(115200);
+  Serial.println("ESP32-C3 Button+LED ready");
+  Serial.println("Hold button to light LED");
+}
+
+void loop() {
+  bool pressed = digitalRead(BTN_PIN) == LOW;
+  digitalWrite(LED_PIN, pressed ? HIGH : LOW);
+  if (pressed) Serial.println("Button pressed!");
+  delay(50);
+}`,
+    components: [
+      { type: 'wokwi-pushbutton', id: 'c3-btn1', x: 440, y: 120, properties: {} },
+      { type: 'wokwi-led', id: 'c3-led-btn', x: 440, y: 260, properties: { color: 'blue' } },
+    ],
+    wires: [
+      { id: 'c3-bw1', start: { componentId: 'esp32-c3', pinName: '9'  }, end: { componentId: 'c3-btn1',    pinName: '1a' }, color: '#00aaff' },
+      { id: 'c3-bw2', start: { componentId: 'esp32-c3', pinName: '8'  }, end: { componentId: 'c3-led-btn', pinName: 'A'  }, color: '#2244ff' },
+    ],
+  },
+  {
+    id: 'c3-serial-echo',
+    title: 'ESP32-C3: Serial Echo',
+    description: 'Type in Serial Monitor and see it echoed back by the ESP32-C3 browser emulator.',
+    category: 'communication',
+    difficulty: 'beginner',
+    boardType: 'esp32-c3',
+    boardFilter: 'esp32-c3',
+    code: `// ESP32-C3 — Serial Echo
+// Open Serial Monitor at 115200 baud, type anything
+
+void setup() {
+  Serial.begin(115200);
+  delay(200);
+  Serial.println("ESP32-C3 Serial Echo");
+  Serial.println("Type anything and press Enter...");
+}
+
+void loop() {
+  if (Serial.available()) {
+    String line = Serial.readStringUntil('\\n');
+    line.trim();
+    if (line.length() > 0) {
+      Serial.print("Echo: ");
+      Serial.println(line);
+    }
+  }
+}`,
+    components: [],
+    wires: [],
+  },
+
+  // ─── 7-Segment Display Examples ──────────────────────────────────────────
+  {
+    id: 'uno-7segment',
+    title: 'Uno: 7-Segment Counter',
+    description: 'Count 0–9 on a 7-segment display driven directly from pins 2–8 on the Arduino Uno.',
+    category: 'displays',
+    difficulty: 'beginner',
+    boardFilter: 'arduino-uno',
+    code: `// Arduino Uno — 7-Segment Display Counter 0-9
+// Segments: a=2, b=3, c=4, d=5, e=6, f=7, g=8
+// Common cathode display
+
+// Segment pins: a b c d e f g
+const int SEG[7] = {2, 3, 4, 5, 6, 7, 8};
+
+// Digit patterns [a,b,c,d,e,f,g] (1=ON)
+const bool DIGITS[10][7] = {
+  {1,1,1,1,1,1,0}, // 0
+  {0,1,1,0,0,0,0}, // 1
+  {1,1,0,1,1,0,1}, // 2
+  {1,1,1,1,0,0,1}, // 3
+  {0,1,1,0,0,1,1}, // 4
+  {1,0,1,1,0,1,1}, // 5
+  {1,0,1,1,1,1,1}, // 6
+  {1,1,1,0,0,0,0}, // 7
+  {1,1,1,1,1,1,1}, // 8
+  {1,1,1,1,0,1,1}, // 9
+};
+
+void showDigit(int d) {
+  for (int i = 0; i < 7; i++)
+    digitalWrite(SEG[i], DIGITS[d][i] ? HIGH : LOW);
+}
+
+void setup() {
+  for (int i = 0; i < 7; i++) pinMode(SEG[i], OUTPUT);
+  Serial.begin(9600);
+  Serial.println("7-Segment Counter ready");
+}
+
+void loop() {
+  for (int d = 0; d <= 9; d++) {
+    showDigit(d);
+    Serial.println(d);
+    delay(800);
+  }
+}`,
+    components: [
+      { type: 'wokwi-7segment', id: 'seg1', x: 440, y: 140, properties: { common: 'cathode', color: 'red' } },
+    ],
+    wires: [
+      { id: 'seg-a', start: { componentId: 'arduino-uno', pinName: '2' }, end: { componentId: 'seg1', pinName: 'A' }, color: '#ff4444' },
+      { id: 'seg-b', start: { componentId: 'arduino-uno', pinName: '3' }, end: { componentId: 'seg1', pinName: 'B' }, color: '#ff8800' },
+      { id: 'seg-c', start: { componentId: 'arduino-uno', pinName: '4' }, end: { componentId: 'seg1', pinName: 'C' }, color: '#ffcc00' },
+      { id: 'seg-d', start: { componentId: 'arduino-uno', pinName: '5' }, end: { componentId: 'seg1', pinName: 'D' }, color: '#44cc44' },
+      { id: 'seg-e', start: { componentId: 'arduino-uno', pinName: '6' }, end: { componentId: 'seg1', pinName: 'E' }, color: '#4488ff' },
+      { id: 'seg-f', start: { componentId: 'arduino-uno', pinName: '7' }, end: { componentId: 'seg1', pinName: 'F' }, color: '#aa44ff' },
+      { id: 'seg-g', start: { componentId: 'arduino-uno', pinName: '8' }, end: { componentId: 'seg1', pinName: 'G' }, color: '#ffffff' },
+    ],
+  },
+  {
+    id: 'pico-7segment',
+    title: 'Pico: 7-Segment Counter',
+    description: 'Count 0–9 on a 7-segment display driven from GPIO 2–8 on the Raspberry Pi Pico.',
+    category: 'displays',
+    difficulty: 'beginner',
+    boardType: 'raspberry-pi-pico',
+    boardFilter: 'raspberry-pi-pico',
+    code: `// Raspberry Pi Pico — 7-Segment Display Counter 0-9
+// Segments: a=2, b=3, c=4, d=5, e=6, f=7, g=8
+
+const int SEG[7] = {2, 3, 4, 5, 6, 7, 8};
+
+const bool DIGITS[10][7] = {
+  {1,1,1,1,1,1,0}, // 0
+  {0,1,1,0,0,0,0}, // 1
+  {1,1,0,1,1,0,1}, // 2
+  {1,1,1,1,0,0,1}, // 3
+  {0,1,1,0,0,1,1}, // 4
+  {1,0,1,1,0,1,1}, // 5
+  {1,0,1,1,1,1,1}, // 6
+  {1,1,1,0,0,0,0}, // 7
+  {1,1,1,1,1,1,1}, // 8
+  {1,1,1,1,0,1,1}, // 9
+};
+
+void showDigit(int d) {
+  for (int i = 0; i < 7; i++)
+    digitalWrite(SEG[i], DIGITS[d][i] ? HIGH : LOW);
+}
+
+void setup() {
+  for (int i = 0; i < 7; i++) pinMode(SEG[i], OUTPUT);
+  Serial.begin(115200);
+  Serial.println("Pico 7-Segment Counter");
+}
+
+void loop() {
+  for (int d = 0; d <= 9; d++) {
+    showDigit(d);
+    Serial.print("Digit: ");
+    Serial.println(d);
+    delay(700);
+  }
+}`,
+    components: [
+      { type: 'wokwi-7segment', id: 'pico-seg1', x: 440, y: 140, properties: { common: 'cathode', color: 'green' } },
+    ],
+    wires: [
+      { id: 'ps-a', start: { componentId: 'nano-rp2040', pinName: 'D2' }, end: { componentId: 'pico-seg1', pinName: 'A' }, color: '#ff4444' },
+      { id: 'ps-b', start: { componentId: 'nano-rp2040', pinName: 'D3' }, end: { componentId: 'pico-seg1', pinName: 'B' }, color: '#ff8800' },
+      { id: 'ps-c', start: { componentId: 'nano-rp2040', pinName: 'D4' }, end: { componentId: 'pico-seg1', pinName: 'C' }, color: '#ffcc00' },
+      { id: 'ps-d', start: { componentId: 'nano-rp2040', pinName: 'D5' }, end: { componentId: 'pico-seg1', pinName: 'D' }, color: '#44cc44' },
+      { id: 'ps-e', start: { componentId: 'nano-rp2040', pinName: 'D6' }, end: { componentId: 'pico-seg1', pinName: 'E' }, color: '#4488ff' },
+      { id: 'ps-f', start: { componentId: 'nano-rp2040', pinName: 'D7' }, end: { componentId: 'pico-seg1', pinName: 'F' }, color: '#aa44ff' },
+      { id: 'ps-g', start: { componentId: 'nano-rp2040', pinName: 'D8' }, end: { componentId: 'pico-seg1', pinName: 'G' }, color: '#ffffff' },
+    ],
+  },
+  {
+    id: 'esp32-7segment',
+    title: 'ESP32: 7-Segment Counter',
+    description: 'Count 0–9 on a 7-segment display driven from GPIO 12–18 on the ESP32.',
+    category: 'displays',
+    difficulty: 'beginner',
+    boardType: 'esp32',
+    boardFilter: 'esp32',
+    code: `// ESP32 — 7-Segment Display Counter 0-9
+// Segments: a=12, b=13, c=14, d=15, e=16, f=17, g=18
+
+const int SEG[7] = {12, 13, 14, 15, 16, 17, 18};
+
+const bool DIGITS[10][7] = {
+  {1,1,1,1,1,1,0}, // 0
+  {0,1,1,0,0,0,0}, // 1
+  {1,1,0,1,1,0,1}, // 2
+  {1,1,1,1,0,0,1}, // 3
+  {0,1,1,0,0,1,1}, // 4
+  {1,0,1,1,0,1,1}, // 5
+  {1,0,1,1,1,1,1}, // 6
+  {1,1,1,0,0,0,0}, // 7
+  {1,1,1,1,1,1,1}, // 8
+  {1,1,1,1,0,1,1}, // 9
+};
+
+void showDigit(int d) {
+  for (int i = 0; i < 7; i++)
+    digitalWrite(SEG[i], DIGITS[d][i] ? HIGH : LOW);
+}
+
+void setup() {
+  for (int i = 0; i < 7; i++) pinMode(SEG[i], OUTPUT);
+  Serial.begin(115200);
+  Serial.println("ESP32 7-Segment Counter");
+}
+
+void loop() {
+  for (int d = 0; d <= 9; d++) {
+    showDigit(d);
+    Serial.print("Digit: "); Serial.println(d);
+    delay(700);
+  }
+}`,
+    components: [
+      { type: 'wokwi-7segment', id: 'esp-seg1', x: 440, y: 140, properties: { common: 'cathode', color: 'orange' } },
+    ],
+    wires: [
+      { id: 'es-a', start: { componentId: 'arduino-uno', pinName: 'GPIO12' }, end: { componentId: 'esp-seg1', pinName: 'A' }, color: '#ff4444' },
+      { id: 'es-b', start: { componentId: 'arduino-uno', pinName: 'GPIO13' }, end: { componentId: 'esp-seg1', pinName: 'B' }, color: '#ff8800' },
+      { id: 'es-c', start: { componentId: 'arduino-uno', pinName: 'GPIO14' }, end: { componentId: 'esp-seg1', pinName: 'C' }, color: '#ffcc00' },
+      { id: 'es-d', start: { componentId: 'arduino-uno', pinName: 'GPIO15' }, end: { componentId: 'esp-seg1', pinName: 'D' }, color: '#44cc44' },
+      { id: 'es-e', start: { componentId: 'arduino-uno', pinName: 'GPIO16' }, end: { componentId: 'esp-seg1', pinName: 'E' }, color: '#4488ff' },
+      { id: 'es-f', start: { componentId: 'arduino-uno', pinName: 'GPIO17' }, end: { componentId: 'esp-seg1', pinName: 'F' }, color: '#aa44ff' },
+      { id: 'es-g', start: { componentId: 'arduino-uno', pinName: 'GPIO18' }, end: { componentId: 'esp-seg1', pinName: 'G' }, color: '#ffffff' },
+    ],
+  },
+
+  // ─── More Arduino Uno Examples ────────────────────────────────────────────
+  {
+    id: 'uno-potentiometer',
+    title: 'Uno: Potentiometer → Serial',
+    description: 'Read an analog potentiometer on A0 and print the value to Serial Monitor.',
+    category: 'sensors',
+    difficulty: 'beginner',
+    boardFilter: 'arduino-uno',
+    code: `// Arduino Uno — Potentiometer ADC reading
+
+const int POT_PIN = A0;
+
+void setup() {
+  Serial.begin(9600);
+  Serial.println("Potentiometer demo — turn the knob!");
+}
+
+void loop() {
+  int raw = analogRead(POT_PIN);          // 0–1023
+  float voltage = raw * (5.0 / 1023.0);  // convert to volts
+  float percent  = raw / 10.23;
+
+  Serial.print("ADC: ");
+  Serial.print(raw);
+  Serial.print("  |  ");
+  Serial.print(voltage, 2);
+  Serial.print(" V  |  ");
+  Serial.print(percent, 1);
+  Serial.println(" %");
+
+  delay(200);
+}`,
+    components: [
+      { type: 'wokwi-potentiometer', id: 'pot1', x: 440, y: 160, properties: {} },
+    ],
+    wires: [
+      { id: 'w-pot-sig', start: { componentId: 'arduino-uno', pinName: 'A0' }, end: { componentId: 'pot1', pinName: 'SIG' }, color: '#aa44ff' },
+    ],
+  },
+  {
+    id: 'uno-rgb-cycle',
+    title: 'Uno: RGB LED Cycle',
+    description: 'Cycle through 7 colors on an RGB LED connected to pins 9 (R), 10 (G), 11 (B) using PWM.',
+    category: 'basics',
+    difficulty: 'beginner',
+    boardFilter: 'arduino-uno',
+    code: `// Arduino Uno — RGB LED color cycle using PWM
+
+#define R_PIN 9
+#define G_PIN 10
+#define B_PIN 11
+
+void setColor(int r, int g, int b) {
+  analogWrite(R_PIN, r);
+  analogWrite(G_PIN, g);
+  analogWrite(B_PIN, b);
+}
+
+void setup() {
+  Serial.begin(9600);
+  Serial.println("RGB LED Cycle — 7 colors");
+}
+
+void loop() {
+  setColor(255,   0,   0); Serial.println("RED");     delay(600);
+  setColor(  0, 255,   0); Serial.println("GREEN");   delay(600);
+  setColor(  0,   0, 255); Serial.println("BLUE");    delay(600);
+  setColor(255, 255,   0); Serial.println("YELLOW");  delay(600);
+  setColor(  0, 255, 255); Serial.println("CYAN");    delay(600);
+  setColor(255,   0, 255); Serial.println("MAGENTA"); delay(600);
+  setColor(255, 255, 255); Serial.println("WHITE");   delay(600);
+  setColor(  0,   0,   0); Serial.println("OFF");     delay(300);
+}`,
+    components: [
+      { type: 'wokwi-rgb-led', id: 'rgb1', x: 440, y: 160, properties: {} },
+    ],
+    wires: [
+      { id: 'w-r', start: { componentId: 'arduino-uno', pinName: '9'  }, end: { componentId: 'rgb1', pinName: 'R' }, color: '#ff2222' },
+      { id: 'w-g', start: { componentId: 'arduino-uno', pinName: '10' }, end: { componentId: 'rgb1', pinName: 'G' }, color: '#22cc22' },
+      { id: 'w-b', start: { componentId: 'arduino-uno', pinName: '11' }, end: { componentId: 'rgb1', pinName: 'B' }, color: '#2244ff' },
+    ],
+  },
+
+  // ─── More Pico Examples ───────────────────────────────────────────────────
+  {
+    id: 'pico-button-led',
+    title: 'Pico: Button + LED',
+    description: 'Press a button on GP2 to light up an LED on GP3 on the Raspberry Pi Pico.',
+    category: 'basics',
+    difficulty: 'beginner',
+    boardType: 'raspberry-pi-pico',
+    boardFilter: 'raspberry-pi-pico',
+    code: `// Raspberry Pi Pico — Button controls LED
+// Button on GP2 (INPUT_PULLUP), LED on GP3
+
+#define BTN_PIN 2
+#define LED_PIN 3
+
+void setup() {
+  pinMode(BTN_PIN, INPUT_PULLUP);
+  pinMode(LED_PIN, OUTPUT);
+  Serial.begin(115200);
+  Serial.println("Pico Button+LED ready — press button on GP2");
+}
+
+void loop() {
+  bool pressed = digitalRead(BTN_PIN) == LOW;
+  digitalWrite(LED_PIN, pressed ? HIGH : LOW);
+}`,
+    components: [
+      { type: 'wokwi-pushbutton', id: 'pico-btn1', x: 440, y: 120, properties: {} },
+      { type: 'wokwi-led', id: 'pico-led-btn', x: 440, y: 260, properties: { color: 'yellow' } },
+    ],
+    wires: [
+      { id: 'pb-btn', start: { componentId: 'nano-rp2040', pinName: 'D2' }, end: { componentId: 'pico-btn1', pinName: '1a' }, color: '#00aaff' },
+      { id: 'pb-led', start: { componentId: 'nano-rp2040', pinName: 'D3' }, end: { componentId: 'pico-led-btn', pinName: 'A' }, color: '#ffcc00' },
+    ],
+  },
+  {
+    id: 'pico-rgb',
+    title: 'Pico: RGB LED Cycle',
+    description: 'Cycle through colors on an RGB LED using GPIO 6 (R), 7 (G), 8 (B) on the Raspberry Pi Pico.',
+    category: 'basics',
+    difficulty: 'beginner',
+    boardType: 'raspberry-pi-pico',
+    boardFilter: 'raspberry-pi-pico',
+    code: `// Raspberry Pi Pico — RGB LED color cycle
+
+#define R_PIN 6
+#define G_PIN 7
+#define B_PIN 8
+
+void setRGB(bool r, bool g, bool b) {
+  digitalWrite(R_PIN, r ? HIGH : LOW);
+  digitalWrite(G_PIN, g ? HIGH : LOW);
+  digitalWrite(B_PIN, b ? HIGH : LOW);
+}
+
+void setup() {
+  pinMode(R_PIN, OUTPUT);
+  pinMode(G_PIN, OUTPUT);
+  pinMode(B_PIN, OUTPUT);
+  Serial.begin(115200);
+  Serial.println("Pico RGB LED demo");
+}
+
+void loop() {
+  setRGB(1,0,0); Serial.println("RED");    delay(600);
+  setRGB(0,1,0); Serial.println("GREEN");  delay(600);
+  setRGB(0,0,1); Serial.println("BLUE");   delay(600);
+  setRGB(1,1,0); Serial.println("YELLOW"); delay(600);
+  setRGB(0,1,1); Serial.println("CYAN");   delay(600);
+  setRGB(1,0,1); Serial.println("MAGENTA");delay(600);
+  setRGB(0,0,0); Serial.println("OFF");    delay(300);
+}`,
+    components: [
+      { type: 'wokwi-rgb-led', id: 'pico-rgb1', x: 440, y: 160, properties: {} },
+    ],
+    wires: [
+      { id: 'pr-r', start: { componentId: 'nano-rp2040', pinName: 'D6' }, end: { componentId: 'pico-rgb1', pinName: 'R' }, color: '#ff2222' },
+      { id: 'pr-g', start: { componentId: 'nano-rp2040', pinName: 'D7' }, end: { componentId: 'pico-rgb1', pinName: 'G' }, color: '#22cc22' },
+      { id: 'pr-b', start: { componentId: 'nano-rp2040', pinName: 'D8' }, end: { componentId: 'pico-rgb1', pinName: 'B' }, color: '#2244ff' },
     ],
   },
 ];

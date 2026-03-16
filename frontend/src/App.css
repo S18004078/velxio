@@ -34,9 +34,14 @@ body {
 
 .header-content {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   width: 100%;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
 .header-brand {
@@ -117,6 +122,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-left: auto;
 }
 
 /* Mobile hamburger */

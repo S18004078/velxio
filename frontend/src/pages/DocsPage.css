@@ -12,7 +12,7 @@
   --mono: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
   --radius: 3px;
   --sidebar-w: 240px;
-  --nav-h: 52px;
+  --nav-h: 44px;
 }
 
 /* ── Page layout ────────────────────────────────────────── */
@@ -129,6 +129,11 @@
   width: 16px;
   height: 16px;
   display: block;
+}
+
+/* ── Mobile bar (sidebar toggle, shown only on mobile) ────── */
+.docs-mobile-bar {
+  display: none;
 }
 
 /* ── Body layout ─────────────────────────────────────────── */
@@ -437,14 +442,25 @@
     transform: translateX(0);
   }
 
+  .docs-mobile-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .docs-mobile-bar-title {
+    font-size: 13px;
+    color: var(--text-muted);
+    font-family: var(--mono);
+  }
+
   .docs-sidebar-toggle {
     display: flex;
     align-items: center;
     justify-content: center;
-  }
-
-  .docs-nav-links {
-    display: none;
   }
 
   .docs-main {

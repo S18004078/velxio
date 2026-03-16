@@ -283,3 +283,52 @@
     min-width: auto;
   }
 }
+
+/* Board tabs */
+.examples-board-tabs {
+  max-width: 1200px;
+  margin: 0 auto 24px auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 4px;
+}
+
+.board-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 20px;
+  border: 1px solid #555;
+  background: #2d2d2d;
+  color: #ccc;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.18s;
+  white-space: nowrap;
+}
+
+.board-tab:hover {
+  border-color: #888;
+  color: #fff;
+  background: #3a3a3a;
+}
+
+.board-tab.active {
+  font-weight: 700;
+}
+
+.board-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  background: rgba(255,255,255,0.18);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0 4px;
+}

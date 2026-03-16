@@ -14,11 +14,12 @@ import { PinOverlay } from './PinOverlay';
 // Board visual dimensions (width × height) for the drag-overlay sizing.
 // ESP32 sizes match the wokwi-boards SVG rendered at 5 px/mm.
 const BOARD_SIZE: Record<string, { w: number; h: number }> = {
-  'arduino-uno':       { w: 360, h: 250 },
-  'arduino-nano':      { w: 175, h:  70 },
-  'arduino-mega':      { w: 530, h: 195 },
-  'raspberry-pi-pico': { w: 280, h: 180 },
-  'raspberry-pi-3':    { w: 320, h: 205 },
+  // wokwi-elements: rendered at 96 dpi — 1mm = 3.7795px
+  'arduino-uno':       { w: 274, h: 202 },  // 72.58mm × 53.34mm
+  'arduino-nano':      { w: 170, h:  67 },  // 44.9mm  × 17.8mm
+  'arduino-mega':      { w: 388, h: 192 },  // 102.66mm × 50.80mm
+  'raspberry-pi-pico': { w: 168, h:  68 },  // wokwi-nano-rp2040-connect: 44.573mm × 17.956mm
+  'raspberry-pi-3':    { w: 250, h: 160 },  // RaspberryPi3Element: PI_WIDTH=250 PI_HEIGHT=160
   'esp32':    { w: 141, h: 265 },  // esp32-devkit-v1: 28.2 × 53 mm
   'esp32-s3': { w: 128, h: 350 },  // esp32-s3-devkitc-1: 25.5 × 70 mm
   'esp32-c3': { w: 127, h: 215 },  // esp32-c3-devkitm-1: 25.4 × 42.9 mm

@@ -44,21 +44,22 @@ export const AppHeader: React.FC<AppHeaderProps> = () => {
     <header className="app-header">
       <div className="header-content">
 
-        {/* Brand */}
-        <div className="header-brand">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#007acc" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="5" y="5" width="14" height="14" rx="2" />
-            <rect x="9" y="9" width="6" height="6" />
-            <path d="M9 1v4M15 1v4M9 19v4M15 19v4M1 9h4M1 15h4M19 9h4M19 15h4" />
-          </svg>
-          <Link to="/" style={{ textDecoration: 'none', color: 'inherit' }}>
-            <span className="header-title">Velxio</span>
-          </Link>
-        </div>
+        <div className="header-left">
+          {/* Brand */}
+          <div className="header-brand">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#007acc" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="5" y="5" width="14" height="14" rx="2" />
+              <rect x="9" y="9" width="6" height="6" />
+              <path d="M9 1v4M15 1v4M9 19v4M15 19v4M1 9h4M1 15h4M19 9h4M19 15h4" />
+            </svg>
+            <Link to="/" style={{ textDecoration: 'none', color: 'inherit' }}>
+              <span className="header-title">Velxio</span>
+            </Link>
+          </div>
 
-        {/* Main nav links (desktop) */}
-        <nav className={'header-nav-links' + (menuOpen ? ' header-nav-open' : '')}>
-          <Link to="/" className={'header-nav-link' + isActive('/')}>Home</Link>
+          {/* Main nav links (desktop) */}
+          <nav className={'header-nav-links' + (menuOpen ? ' header-nav-open' : '')}>
+            <Link to="/" className={'header-nav-link' + isActive('/')}>Home</Link>
           <Link to="/docs" className={'header-nav-link' + isActive('/docs')}>Documentation</Link>
           <Link to="/examples" className={'header-nav-link' + isActive('/examples')}>Examples</Link>
           <Link to="/editor" className={'header-nav-link' + isActive('/editor')}>Editor</Link>
@@ -74,7 +75,8 @@ export const AppHeader: React.FC<AppHeaderProps> = () => {
             </svg>
             Discord
           </a>
-        </nav>
+          </nav>
+        </div>
 
         {/* Right: auth + mobile hamburger */}
         <div className="header-right">
