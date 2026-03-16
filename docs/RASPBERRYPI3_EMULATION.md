@@ -57,6 +57,12 @@ There is **no compilation step** for the Raspberry Pi: you write a Python script
 
 ## 2. Supported Boards
 
+<table>
+<tr>
+  <td align="center"><img src="img/boards/Raspberry_Pi_3.png" width="180" alt="Raspberry Pi 3B"/><br/><b>Raspberry Pi 3B</b></td>
+</tr>
+</table>
+
 | Board | QEMU Machine | CPU | Notes |
 | ----- | ------------ | --- | ----- |
 | Raspberry Pi 3B | `raspi3b` | BCM2837, 4× Cortex-A53 | Full Raspberry Pi OS support |
@@ -172,7 +178,7 @@ Both ports are allocated dynamically at startup to avoid conflicts on the host m
 
 The `gpio_shim.py` module is injected into the Raspberry Pi OS at the standard `RPi.GPIO` installation path:
 
-```
+```text
 /usr/local/lib/python3.11/dist-packages/RPi/GPIO.py
 ```
 

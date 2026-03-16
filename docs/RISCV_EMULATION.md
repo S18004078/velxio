@@ -48,6 +48,14 @@ Boards based on **ESP32-C3** use Espressif's **ESP32-C3** processor, which imple
 
 ## 2. Supported Boards
 
+<table>
+<tr>
+  <td align="center"><img src="img/boards/esp32-c3.png" width="180" alt="ESP32-C3 DevKit"/><br/><b>ESP32-C3 DevKit</b></td>
+  <td align="center"><img src="img/boards/xiao-esp32-c3.png" width="180" alt="Seeed XIAO ESP32-C3"/><br/><b>Seeed XIAO ESP32-C3</b></td>
+  <td align="center"><img src="img/boards/esp32c3-supermini.png" width="180" alt="ESP32-C3 SuperMini"/><br/><b>ESP32-C3 SuperMini</b></td>
+</tr>
+</table>
+
 | Board | arduino-cli FQBN | Built-in LED |
 | ----- | ---------------- | ------------ |
 | ESP32-C3 DevKit | `esp32:esp32:esp32c3` | GPIO 8 |
@@ -58,7 +66,7 @@ Boards based on **ESP32-C3** use Espressif's **ESP32-C3** processor, which imple
 
 ## 3. Emulator Architecture
 
-```
+```text
 Arduino Sketch (.ino)
         │
         ▼ arduino-cli (backend)
@@ -225,7 +233,7 @@ See full script: `frontend/src/__tests__/fixtures/esp32c3-blink/build.sh`
 
 The backend produces a merged **4 MB** image:
 
-```
+```text
 Offset 0x00000: 0xFF (empty)
 Offset 0x01000: bootloader   (ESP32 format image, magic 0xE9)
 Offset 0x08000: partition table
@@ -234,7 +242,7 @@ Offset 0x10000: app binary   (ESP32 format image, magic 0xE9) ← parsed here
 
 ### ESP32 Image Header (24 bytes)
 
-```
+```text
 +0x00  magic (0xE9)
 +0x01  segment_count
 +0x02  spi_mode
@@ -245,7 +253,7 @@ Offset 0x10000: app binary   (ESP32 format image, magic 0xE9) ← parsed here
 
 ### Segment Header (8 bytes)
 
-```
+```text
 +0x00  load_addr   ← destination virtual address (e.g. 0x42000000)
 +0x04  data_len
 +0x08  data[data_len]
@@ -401,14 +409,15 @@ Compiles `blink.c` with `riscv32-esp-elf-gcc` (the arduino-cli toolchain) and ve
 | `reset() clears GPIO state` | Functional reset |
 
 **Expected result:**
-```
+
+```text
 ✓ esp32c3-simulation.test.ts  (30 tests)  ~500ms
 ✓ esp32c3-blink.test.ts        (8 tests)  ~300ms
 ```
 
 ### Bare-Metal Test Binary
 
-```
+```text
 frontend/src/__tests__/fixtures/esp32c3-blink/
 ├── blink.c       ← bare-metal source code
 ├── link.ld       ← linker script (IROM @ 0x42000000, DRAM @ 0x3FC80000)

@@ -68,21 +68,21 @@ Component Picker showing 48 available components with visual previews, search, a
 
 <table>
 <tr>
-  <td align="center"><img src="frontend/public/boards/pi-pico.svg" width="130" alt="Raspberry Pi Pico"/><br/><b>Raspberry Pi Pico</b></td>
-  <td align="center"><img src="frontend/public/boards/pi-pico-w.svg" width="130" alt="Raspberry Pi Pico W"/><br/><b>Raspberry Pi Pico W</b></td>
-  <td align="center"><img src="frontend/public/boards/esp32-devkit-c-v4.svg" width="130" alt="ESP32 DevKit C"/><br/><b>ESP32 DevKit C</b></td>
-  <td align="center"><img src="frontend/public/boards/esp32-s3.svg" width="130" alt="ESP32-S3"/><br/><b>ESP32-S3</b></td>
+  <td align="center"><img src="docs/img/boards/pi-pico.png" width="140" alt="Raspberry Pi Pico"/><br/><b>Raspberry Pi Pico</b></td>
+  <td align="center"><img src="docs/img/boards/pi-pico-w.png" width="140" alt="Raspberry Pi Pico W"/><br/><b>Raspberry Pi Pico W</b></td>
+  <td align="center"><img src="docs/img/boards/esp32-devkit-c-v4.png" width="140" alt="ESP32 DevKit C"/><br/><b>ESP32 DevKit C</b></td>
+  <td align="center"><img src="docs/img/boards/esp32-s3.png" width="140" alt="ESP32-S3"/><br/><b>ESP32-S3</b></td>
 </tr>
 <tr>
-  <td align="center"><img src="frontend/public/boards/esp32-c3.svg" width="130" alt="ESP32-C3"/><br/><b>ESP32-C3</b></td>
-  <td align="center"><img src="frontend/public/boards/xiao-esp32-c3.svg" width="130" alt="Seeed XIAO ESP32-C3"/><br/><b>Seeed XIAO ESP32-C3</b></td>
-  <td align="center"><img src="frontend/public/boards/esp32c3-supermini.svg" width="130" alt="ESP32-C3 SuperMini"/><br/><b>ESP32-C3 SuperMini</b></td>
-  <td align="center"><img src="frontend/public/boards/esp32-cam.svg" width="130" alt="ESP32-CAM"/><br/><b>ESP32-CAM</b></td>
+  <td align="center"><img src="docs/img/boards/esp32-c3.png" width="140" alt="ESP32-C3"/><br/><b>ESP32-C3</b></td>
+  <td align="center"><img src="docs/img/boards/xiao-esp32-c3.png" width="140" alt="Seeed XIAO ESP32-C3"/><br/><b>Seeed XIAO ESP32-C3</b></td>
+  <td align="center"><img src="docs/img/boards/esp32c3-supermini.png" width="140" alt="ESP32-C3 SuperMini"/><br/><b>ESP32-C3 SuperMini</b></td>
+  <td align="center"><img src="docs/img/boards/esp32-cam.png" width="140" alt="ESP32-CAM"/><br/><b>ESP32-CAM</b></td>
 </tr>
 <tr>
-  <td align="center"><img src="frontend/public/boards/xiao-esp32-s3.svg" width="130" alt="Seeed XIAO ESP32-S3"/><br/><b>Seeed XIAO ESP32-S3</b></td>
-  <td align="center"><img src="frontend/public/boards/arduino-nano-esp32.svg" width="130" alt="Arduino Nano ESP32"/><br/><b>Arduino Nano ESP32</b></td>
-  <td align="center"><img src="frontend/public/boards/Raspberry_Pi_3.svg" width="130" alt="Raspberry Pi 3B"/><br/><b>Raspberry Pi 3B</b></td>
+  <td align="center"><img src="docs/img/boards/xiao-esp32-s3.png" width="140" alt="Seeed XIAO ESP32-S3"/><br/><b>Seeed XIAO ESP32-S3</b></td>
+  <td align="center"><img src="docs/img/boards/arduino-nano-esp32.png" width="140" alt="Arduino Nano ESP32"/><br/><b>Arduino Nano ESP32</b></td>
+  <td align="center"><img src="docs/img/boards/Raspberry_Pi_3.png" width="140" alt="Raspberry Pi 3B"/><br/><b>Raspberry Pi 3B</b></td>
   <td align="center">Arduino Uno / Nano / Mega<br/>(ATmega328p / 2560)</td>
 </tr>
 </table>
