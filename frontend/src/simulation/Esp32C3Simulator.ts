@@ -74,10 +74,26 @@ const EXTMEM_ICACHE_PRELOAD_CTRL = 0x34; // bit1=PRELOAD_DONE
 const EXTMEM_ICACHE_AUTOLOAD_CTRL = 0x40; // bit3=AUTOLOAD_DONE
 const EXTMEM_ICACHE_LOCK_CTRL   = 0x1C;  // bit2=LOCK_DONE
 
-// ── Interrupt Controller (no-op passthrough) @ 0x600C5000 ───────────────────
-// FreeRTOS configures source→CPU-int routing here; we handle routing ourselves.
-const INTC_BASE = 0x600C5000;
-const INTC_SIZE = 0x800;
+// ── Interrupt Matrix @ 0x600C2000 ─────────────────────────────────────────
+// The ESP32-C3 interrupt matrix routes 62 peripheral interrupt sources to
+// up to 31 CPU interrupt lines (line 0 = disabled).
+const INTMATRIX_BASE = 0x600C2000;
+const INTMATRIX_SIZE = 0x800;
+// Register layout (offsets from INTMATRIX_BASE):
+//   0x000-0x0F4 : 62 SOURCE_MAP registers (5-bit mapping: source → CPU line)
+//   0x104       : INTR_STATUS (pending lines bitmap, read-only)
+//   0x108       : CLOCK_GATE (clock gating enable)
+//   0x118-0x194 : PRIORITY for lines 1–31 (4-bit each)
+//   0x198       : THRESH (interrupt threshold, 4-bit)
+
+// ── SYSTEM/CLK registers @ 0x600C0000 ─────────────────────────────────────
+// Contains FROM_CPU_INTR software interrupt triggers and misc system config.
+const SYSCON_BASE = 0x600C0000;
+const SYSCON_SIZE = 0x800;
+
+// ── Interrupt source numbers (from ESP-IDF soc/esp32c3/interrupts.h) ─────
+const ETS_SYSTIMER_TARGET0_SRC = 37;
+const ETS_FROM_CPU_INTR0_SRC   = 28;  // FROM_CPU_INTR0..3 → sources 28-31
 
 // ── ESP32-C3 ROM stub @ 0x40000000 ──────────────────────────────────────────
 // ROM lives at 0x40000000-0x4001FFFF.  Without a ROM image every ROM call
@@ -110,6 +126,23 @@ export class Esp32C3Simulator {
   private _stIntEna = 0;  // ST_INT_ENA register
   private _stIntRaw = 0;  // ST_INT_RAW register (bit0 = TARGET0 fired)
 
+  // ── ROM binary data (loaded asynchronously from /boards/esp32c3-rom.bin) ──
+  private _romData: Uint8Array | null = null;
+
+  // ── Interrupt matrix state ────────────────────────────────────────────────
+  /** Source→CPU-line mapping (62 sources, each 5-bit → 0-31). */
+  private _intSrcMap = new Uint8Array(62);
+  /** CPU interrupt line enable bitmap (bit N = line N enabled). */
+  private _intLineEnable = 0;
+  /** Per-line priority (lines 1–31, 4-bit each). Index 0 unused. */
+  private _intLinePrio = new Uint8Array(32);
+  /** Interrupt threshold — only lines with priority > threshold can fire. */
+  private _intThreshold = 0;
+  /** Pending interrupt bitmap (set when source is active but can't fire). */
+  private _intPending = 0;
+  /** Current level of each interrupt source (1=asserted, 0=deasserted). */
+  private _intSrcActive = new Uint8Array(62);
+
   /**
    * Shared peripheral register file — echo-back map.
    * Peripheral MMIO writes that aren't handled by specific logic are stored
@@ -128,6 +161,12 @@ export class Esp32C3Simulator {
   private _dbgPrevTickPc = -1;
   private _dbgSamePcCount = 0;
   private _dbgStuckDumped = false;
+  /** Ring buffer of sampled PCs — dumped when stuck detector fires. */
+  private _pcTrace = new Uint32Array(128);
+  private _pcTraceIdx = 0;
+  private _pcTraceStep = 0;
+  /** Count of ROM function calls (for logging first N). */
+  private _romCallCount = 0;
 
   public pinManager: PinManager;
   public onSerialData: ((ch: string) => void) | null = null;
@@ -172,7 +211,8 @@ export class Esp32C3Simulator {
     this._registerUart0();
     this._registerGpio();
     this._registerSysTimer();
-    this._registerIntCtrl();
+    this._registerIntMatrix();
+    this._registerSysCon();
     this._registerRtcCntl();
     // Timer Groups — stub RTCCALICFG1.cal_done for all known base addresses
     // so rtc_clk_cal_internal() poll loop exits immediately.
@@ -185,6 +225,15 @@ export class Esp32C3Simulator {
     this._registerExtMem();
     this._registerRomStub();
     this._registerRomStub2();
+
+    // Wire MIE transition callback — when firmware re-enables interrupts,
+    // scan the interrupt matrix for pending sources and inject them.
+    this.core.onMieEnabled = () => this._onMieEnabled();
+
+    // NOTE: Real ROM binary loading disabled — the ROM code accesses many
+    // peripherals we don't fully emulate, causing the CPU to jump to invalid
+    // addresses.  C.RET stubs returning a0=0 are sufficient for now.
+    // this._loadRom();
 
     this.core.reset(IROM_BASE);
     // Initialize SP to top of DRAM — MUST be after reset() which zeroes all regs
@@ -288,6 +337,10 @@ export class Esp32C3Simulator {
             break;
           case ST_INT_CLR:
             this._stIntRaw &= ~((val & 0xFF) << shift);
+            // If TARGET0 was cleared, deassert the interrupt source
+            if (!(this._stIntRaw & 1)) {
+              this._lowerIntSource(ETS_SYSTIMER_TARGET0_SRC);
+            }
             break;
           default: {
             // Echo-back: store the written value
@@ -301,45 +354,258 @@ export class Esp32C3Simulator {
     );
   }
 
-  /** Interrupt-controller MMIO — FreeRTOS writes source→CPU-int routing here.
-   *  We handle routing via direct triggerInterrupt() calls; unknown offsets
-   *  echo back the last written value so that read-back verification succeeds. */
-  private _registerIntCtrl(): void {
+  // ── Async ROM binary loader ──────────────────────────────────────────────
+
+  // @ts-expect-error kept for future use when more peripherals are emulated
+  private async _loadRom(): Promise<void> {
+    try {
+      const resp = await fetch('/boards/esp32c3-rom.bin');
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const buf = await resp.arrayBuffer();
+      this._romData = new Uint8Array(buf);
+      console.log(`[ESP32-C3] ROM binary loaded (${this._romData.length} bytes)`);
+    } catch (e) {
+      console.warn('[ESP32-C3] Failed to load ROM binary, using C.RET stub:', e);
+    }
+  }
+
+  // ── Interrupt matrix ───────────────────────────────────────────────────────
+
+  /**
+   * Interrupt matrix (0x600C2000).
+   *
+   * 62 SOURCE_MAP registers route peripheral interrupt sources to CPU lines.
+   * The ENABLE bitmap, per-line PRIORITY, and THRESHOLD control which
+   * interrupts can fire.  Reads/writes are echo-backed via _periRegs and
+   * internal state is updated on every write.
+   */
+  private _registerIntMatrix(): void {
     const peri = this._periRegs;
-    this.core.addMmio(INTC_BASE, INTC_SIZE,
+    const BASE = INTMATRIX_BASE;
+    let logCount = 0;
+
+    this.core.addMmio(BASE, INTMATRIX_SIZE,
       (addr) => {
-        const wordAddr = addr & ~3;
-        const word = peri.get(wordAddr) ?? 0;
-        return (word >>> ((addr & 3) * 8)) & 0xFF;
+        const off = (addr - BASE) & ~3;
+        const byteIdx = (addr - BASE) & 3;
+        let word = 0;
+
+        if (off <= 0x0F8) {
+          // SOURCE_MAP[0..62] (offsets 0x000-0x0F8)
+          const src = off >> 2;
+          word = src < 62 ? this._intSrcMap[src] & 0x1F : 0;
+        } else if (off === 0x104) {
+          // CPU_INT_ENABLE — which CPU interrupt lines are enabled (R/W)
+          word = this._intLineEnable;
+        } else if (off === 0x108) {
+          // CPU_INT_TYPE — edge/level per line (echo-back)
+          word = peri.get(addr & ~3) ?? 0;
+        } else if (off === 0x10C) {
+          // CPU_INT_EIP_STATUS — which lines have pending interrupts (read-only)
+          word = this._intPending;
+        } else if (off >= 0x114 && off <= 0x190) {
+          // CPU_INT_PRI_0..31 (offsets 0x114 + line*4)
+          const line = (off - 0x114) >> 2;
+          word = line < 32 ? this._intLinePrio[line] : 0;
+        } else if (off === 0x194) {
+          // CPU_INT_THRESH
+          word = this._intThreshold;
+        } else {
+          word = peri.get(addr & ~3) ?? 0;
+        }
+        return (word >>> (byteIdx * 8)) & 0xFF;
       },
       (addr, val) => {
+        // Always store for echo-back
         const wordAddr = addr & ~3;
         const prev = peri.get(wordAddr) ?? 0;
         const shift = (addr & 3) * 8;
-        peri.set(wordAddr, (prev & ~(0xFF << shift)) | ((val & 0xFF) << shift));
+        const newWord = (prev & ~(0xFF << shift)) | ((val & 0xFF) << shift);
+        peri.set(wordAddr, newWord);
+
+        // Update internal state from accumulated word
+        const off = (wordAddr - BASE);
+        if (off <= 0x0F8) {
+          const src = off >> 2;
+          if (src < 62) {
+            const oldLine = this._intSrcMap[src];
+            this._intSrcMap[src] = newWord & 0x1F;
+            if ((newWord & 0x1F) !== oldLine && logCount < 30) {
+              logCount++;
+              console.log(`[INTMATRIX] src ${src} → CPU line ${newWord & 0x1F}`);
+            }
+          }
+        } else if (off === 0x104) {
+          this._intLineEnable = newWord;
+          if (logCount < 30) {
+            logCount++;
+            console.log(`[INTMATRIX] ENABLE = 0x${newWord.toString(16)}`);
+          }
+        } else if (off >= 0x114 && off <= 0x190) {
+          const line = (off - 0x114) >> 2;
+          if (line < 32) this._intLinePrio[line] = newWord & 0xF;
+        } else if (off === 0x194) {
+          this._intThreshold = newWord & 0xF;
+          if (logCount < 30) {
+            logCount++;
+            console.log(`[INTMATRIX] THRESH = ${newWord & 0xF}`);
+          }
+        }
       },
     );
   }
 
   /**
-   * ROM stub — makes calls into ESP32-C3 ROM (0x40000000-0x4005FFFF) return
-   * immediately.  Without a ROM image the CPU would fetch 0x00 bytes and loop
-   * forever at address 0.  We stub every 16-bit slot with C.JR ra (0x8082)
-   * so every ROM call acts as a no-op and returns to the call site.
+   * SYSTEM/CLK registers (0x600C0000).
+   *
+   * Provides FROM_CPU_INTR software interrupt triggers (FreeRTOS uses these
+   * for cross-core signalling / context switch on single-core C3) and a
+   * random-number register.
    */
-  private _registerRomStub(): void {
-    this.core.addMmio(ROM_BASE, ROM_SIZE,
-      // C.JR ra = 0x8082, little-endian: even byte=0x82, odd byte=0x80
-      (addr) => (addr & 1) === 0 ? 0x82 : 0x80,
-      (_addr, _val) => {},
+  private _registerSysCon(): void {
+    const peri = this._periRegs;
+    const BASE = SYSCON_BASE;
+
+    this.core.addMmio(BASE, SYSCON_SIZE,
+      (addr) => {
+        const wordAddr = addr & ~3;
+        const byteIdx = (addr - BASE) & 3;
+        const word = peri.get(wordAddr) ?? 0;
+        return (word >>> (byteIdx * 8)) & 0xFF;
+      },
+      (addr, val) => {
+        const wordAddr = addr & ~3;
+        const prev = peri.get(wordAddr) ?? 0;
+        const shift = (addr & 3) * 8;
+        const newWord = (prev & ~(0xFF << shift)) | ((val & 0xFF) << shift);
+        peri.set(wordAddr, newWord);
+
+        // FROM_CPU_INTR: offsets 0x028, 0x02C, 0x030, 0x034
+        const off = wordAddr - BASE;
+        if (off >= 0x028 && off <= 0x034) {
+          const idx = (off - 0x028) >> 2;           // 0–3
+          const src = ETS_FROM_CPU_INTR0_SRC + idx;  // sources 28–31
+          if (newWord & 1) this._raiseIntSource(src);
+          else             this._lowerIntSource(src);
+        }
+      },
     );
   }
 
-  /** Second ROM region (0x40800000) — same stub. */
+  // ── Interrupt matrix dispatch helpers ──────────────────────────────────────
+
+  /**
+   * Assert a peripheral interrupt source. Looks up its CPU line via the
+   * source-map and either fires the interrupt (if MIE is set and priority
+   * meets threshold) or marks it pending.
+   */
+  private _raiseIntSource(src: number): void {
+    if (src >= 62) return;
+    this._intSrcActive[src] = 1;
+    const line = this._intSrcMap[src] & 0x1F;
+    if (line === 0) return;  // line 0 = disabled / not routed
+
+    // Mark pending for this line
+    this._intPending |= (1 << line);
+
+    // Can we deliver right now?
+    if (!(this._intLineEnable & (1 << line))) return;
+    const prio = this._intLinePrio[line];
+    if (prio <= this._intThreshold) return;
+    if (!(this.core.mstatusVal & 0x8)) return;  // MIE not set — stay pending
+
+    this._intPending &= ~(1 << line);
+    this.core.triggerInterrupt(0x80000000 | line);
+  }
+
+  /** Deassert a peripheral interrupt source and clear its pending state. */
+  private _lowerIntSource(src: number): void {
+    if (src >= 62) return;
+    this._intSrcActive[src] = 0;
+    const line = this._intSrcMap[src] & 0x1F;
+    if (line === 0) return;
+
+    // Check if any OTHER active source also maps to this line
+    let stillActive = false;
+    for (let s = 0; s < 62; s++) {
+      if (s !== src && this._intSrcActive[s] && (this._intSrcMap[s] & 0x1F) === line) {
+        stillActive = true;
+        break;
+      }
+    }
+    if (!stillActive) this._intPending &= ~(1 << line);
+  }
+
+  /**
+   * Scan pending interrupts and deliver the highest-priority one.
+   * Called when mstatus.MIE transitions 0→1 (MRET or CSR write).
+   */
+  private _onMieEnabled(): void {
+    if (this._intPending === 0) return;
+    let bestLine = 0;
+    let bestPrio = 0;
+    for (let line = 1; line < 32; line++) {
+      if (!(this._intPending & (1 << line))) continue;
+      if (!(this._intLineEnable & (1 << line))) continue;
+      const prio = this._intLinePrio[line];
+      if (prio > this._intThreshold && prio > bestPrio) {
+        bestPrio = prio;
+        bestLine = line;
+      }
+    }
+    if (bestLine > 0) {
+      this._intPending &= ~(1 << bestLine);
+      this.core.triggerInterrupt(0x80000000 | bestLine);
+    }
+  }
+
+  /**
+   * ROM region (0x40000000-0x4005FFFF) — serves the real ROM binary when
+   * loaded, or falls back to C.RET (0x8082) with a0=0 if the binary is
+   * unavailable.
+   */
+  private _registerRomStub(): void {
+    const core = this.core;
+    this.core.addMmio(ROM_BASE, ROM_SIZE,
+      (addr) => {
+        // If we have the real ROM binary, serve it
+        if (this._romData) {
+          const off = (addr >>> 0) - ROM_BASE;
+          if (off < this._romData.length) return this._romData[off];
+        }
+        // Fallback: detect instruction fetch and set a0=0 for C.RET stub
+        if ((addr & 1) === 0 && (addr >>> 0) === (core.pc >>> 0)) {
+          core.regs[10] = 0;  // a0 = 0 (ESP_OK)
+          if (++this._romCallCount <= 50) {
+            console.log(
+              `[ROM] stub call #${this._romCallCount} → 0x${(addr >>> 0).toString(16)}` +
+              ` ra=0x${(core.regs[1] >>> 0).toString(16)}`
+            );
+          }
+        }
+        return (addr & 1) === 0 ? 0x82 : 0x80;
+      },
+      () => {},
+    );
+  }
+
+  /** Second ROM region (0x40800000) — same stub with a0=0. */
   private _registerRomStub2(): void {
+    const core = this.core;
     this.core.addMmio(ROM2_BASE, ROM2_SIZE,
-      (addr) => (addr & 1) === 0 ? 0x82 : 0x80,
-      (_addr, _val) => {},
+      (addr) => {
+        if ((addr & 1) === 0 && (addr >>> 0) === (core.pc >>> 0)) {
+          core.regs[10] = 0;
+          if (++this._romCallCount <= 50) {
+            console.log(
+              `[ROM2] call #${this._romCallCount} → 0x${(addr >>> 0).toString(16)}` +
+              ` ra=0x${(core.regs[1] >>> 0).toString(16)}`
+            );
+          }
+        }
+        return (addr & 1) === 0 ? 0x82 : 0x80;
+      },
+      () => {},
     );
   }
 
@@ -368,12 +634,20 @@ export class Esp32C3Simulator {
         }
         if (wOff === 0x68) {
           // TIMG_RTCCALICFG: bit15=TIMG_RTC_CALI_RDY=1 — calibration instantly done
-          const word = (1 << 15); // 0x00008000
+          // Also set bit31 (start bit echo) which some versions check
+          const word = (1 << 15) | (1 << 31);
           return (word >>> ((off & 3) * 8)) & 0xFF;
         }
         if (wOff === 0x6C) {
           // TIMG_RTCCALICFG1: bits[31:7]=rtc_cali_value — non-zero so outer retry exits
-          const word = (1000000 << 7); // 0x07A12000
+          const word = (136533 << 7) >>> 0; // typical 150kHz RTC vs 40MHz XTAL
+          return (word >>> ((off & 3) * 8)) & 0xFF;
+        }
+        if (wOff === 0x80) {
+          // TIMG_RTCCALICFG2 (ESP-IDF v5): bit31=timeout(0), bits[24:7]=cali_value
+          // ESP-IDF v5 reads result HERE instead of RTCCALICFG1.
+          // Must be non-zero or rtc_clk_cal() retries forever.
+          const word = (136533 << 7) >>> 0;
           return (word >>> ((off & 3) * 8)) & 0xFF;
         }
         // Echo last written value for all other offsets
@@ -657,6 +931,13 @@ export class Esp32C3Simulator {
     this._dbgTickCount  = 0;
     this._dbgLastMtvec  = 0;
     this._dbgMieEnabled = false;
+    this._dbgPrevTickPc = -1;
+    this._dbgSamePcCount = 0;
+    this._dbgStuckDumped = false;
+    this._pcTrace.fill(0);
+    this._pcTraceIdx = 0;
+    this._pcTraceStep = 0;
+    this._romCallCount = 0;
     console.log(`[ESP32-C3] Simulation started, entry=0x${this.core.pc.toString(16)}`);
     this.running = true;
     this._loop();
@@ -679,6 +960,13 @@ export class Esp32C3Simulator {
     this._dbgTickCount  = 0;
     this._dbgLastMtvec  = 0;
     this._dbgMieEnabled = false;
+    this._dbgPrevTickPc = -1;
+    this._dbgSamePcCount = 0;
+    this._dbgStuckDumped = false;
+    this._pcTrace.fill(0);
+    this._pcTraceIdx = 0;
+    this._pcTraceStep = 0;
+    this._romCallCount = 0;
     this.dram.fill(0);
     this.iram.fill(0);
     this.core.reset(IROM_BASE);
@@ -749,21 +1037,34 @@ export class Esp32C3Simulator {
       const n = rem < CYCLES_PER_TICK ? rem : CYCLES_PER_TICK;
       for (let i = 0; i < n; i++) {
         this.core.step();
+        // Sample PC every 500 steps into a ring buffer for post-mortem analysis
+        if (++this._pcTraceStep >= 500) {
+          this._pcTraceStep = 0;
+          this._pcTrace[this._pcTraceIdx] = this.core.pc >>> 0;
+          this._pcTraceIdx = (this._pcTraceIdx + 1) & 127;
+        }
       }
       rem -= n;
 
       this._dbgTickCount++;
-      // Log every 100 ticks (0.1 s) while still early in boot.
-      if (this._dbgTickCount <= 1000 && this._dbgTickCount % 100 === 0) {
+      // Log frequently early in boot (every 10 ticks for first 50, then every 100)
+      const shouldLog = this._dbgTickCount <= 50
+        ? this._dbgTickCount % 10 === 0
+        : this._dbgTickCount <= 1000 && this._dbgTickCount % 100 === 0;
+      if (shouldLog) {
         const spc = this.core.pc;
         let instrInfo = '';
         const iramOff = spc - IRAM_BASE;
         const flashOff = spc - IROM_BASE;
+        const romOff = spc - ROM_BASE;
         let ib0 = 0, ib1 = 0, ib2 = 0, ib3 = 0;
         if (iramOff >= 0 && iramOff + 4 <= this.iram.length) {
           [ib0, ib1, ib2, ib3] = [this.iram[iramOff], this.iram[iramOff+1], this.iram[iramOff+2], this.iram[iramOff+3]];
         } else if (flashOff >= 0 && flashOff + 4 <= this.flash.length) {
           [ib0, ib1, ib2, ib3] = [this.flash[flashOff], this.flash[flashOff+1], this.flash[flashOff+2], this.flash[flashOff+3]];
+        } else if (romOff >= 0 && romOff < ROM_SIZE) {
+          // PC is in ROM stub region — show 0x8082 (C.RET)
+          ib0 = 0x82; ib1 = 0x80;
         }
         const instr16 = ib0 | (ib1 << 8);
         const instr32 = ((ib0 | (ib1<<8) | (ib2<<16) | (ib3<<24)) >>> 0);
@@ -816,6 +1117,31 @@ export class Esp32C3Simulator {
               console.warn(`  x${i.toString().padStart(2)}(${regNames[i].padEnd(4)}) = 0x${(this.core.regs[i] >>> 0).toString(16).padStart(8, '0')}`);
             }
             console.warn(`  mstatus=0x${(this.core.mstatusVal >>> 0).toString(16)} mtvec=0x${(this.core.mtvecVal >>> 0).toString(16)}`);
+            // Dump sampled PC trace (oldest → newest)
+            const traceEntries: string[] = [];
+            for (let j = 0; j < 128; j++) {
+              const idx = (this._pcTraceIdx + j) & 127;
+              const tpc = this._pcTrace[idx];
+              if (tpc !== 0) traceEntries.push(`0x${tpc.toString(16).padStart(8,'0')}`);
+            }
+            if (traceEntries.length > 0) {
+              // Deduplicate consecutive entries for readability
+              const deduped: string[] = [];
+              let prev = '';
+              let count = 0;
+              for (const e of traceEntries) {
+                if (e === prev) { count++; }
+                else {
+                  if (count > 1) deduped.push(`  (×${count})`);
+                  deduped.push(e);
+                  prev = e;
+                  count = 1;
+                }
+              }
+              if (count > 1) deduped.push(`  (×${count})`);
+              console.warn(`  PC trace (sampled every 500 steps, ${deduped.length} entries):`);
+              console.warn('    ' + deduped.join(', '));
+            }
           }
         } else {
           this._dbgSamePcCount = 0;
@@ -824,9 +1150,11 @@ export class Esp32C3Simulator {
         this._dbgPrevTickPc = curPc;
       }
 
-      // Raise SYSTIMER TARGET0 alarm → CPU interrupt 1 (FreeRTOS tick).
+      // Raise SYSTIMER TARGET0 alarm → routed through interrupt matrix.
       this._stIntRaw |= 1;
-      this.core.triggerInterrupt(0x80000001);
+      if (this._stIntEna & 1) {
+        this._raiseIntSource(ETS_SYSTIMER_TARGET0_SRC);
+      }
     }
 
     this.animFrameId = requestAnimationFrame(() => this._loop());

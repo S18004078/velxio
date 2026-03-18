@@ -54,6 +54,19 @@ export class RiscVCore {
   /** Pending async interrupt cause (bit31=1). Null when none pending. */
   pendingInterrupt: number | null = null;
 
+  /**
+   * Callback fired whenever mstatus.MIE transitions from 0 → 1.
+   * The interrupt matrix uses this to scan pending sources and inject the
+   * highest-priority interrupt immediately after re-enable.
+   */
+  onMieEnabled: (() => void) | null = null;
+
+  // ── RV32A reservation state ───────────────────────────────────────────────
+  /** Address of the load-reserved (lr.w) reservation, or -1 if none. */
+  private _resAddr = -1;
+  /** Whether the reservation is valid (cleared on sc.w, trap, or context switch). */
+  private _resValid = false;
+
   private readonly mem: Uint8Array;
   private readonly memBase: number;
   private readonly mmioRegions: MmioRegion[] = [];
@@ -92,6 +105,8 @@ export class RiscVCore {
     this.mcause   = 0;
     this.mtval    = 0;
     this.pendingInterrupt = null;
+    this._resAddr  = -1;
+    this._resValid = false;
     this._seenUnmapped.clear();
   }
 
@@ -109,21 +124,32 @@ export class RiscVCore {
   private readCsr(addr: number): number {
     switch (addr) {
       case 0x300: return this.mstatus;
+      case 0x301: return 0x40001105;  // misa: RV32IMAC (MXL=01, I+M+A+C)
       case 0x304: return this.mie;
       case 0x305: return this.mtvec;
       case 0x340: return this.mscratch;
       case 0x341: return this.mepc;
       case 0x342: return this.mcause;
       case 0x343: return this.mtval;
+      case 0x344: return this.pendingInterrupt !== null ? (1 << 11) : 0; // mip: MEIP
       case 0xB00: case 0xC00: return this.cycles >>> 0;  // mcycle / cycle (low 32)
       case 0xB80: case 0xC80: return 0;                  // mcycleh / cycleh
+      case 0xF11: return 0;          // mvendorid
+      case 0xF12: return 0;          // marchid
+      case 0xF13: return 0;          // mimpid
+      case 0xF14: return 0;          // mhartid (always 0 — single-hart)
       default:    return 0;
     }
   }
 
   private writeCsr(addr: number, val: number): void {
     switch (addr) {
-      case 0x300: this.mstatus  = val; break;
+      case 0x300: {
+        const oldMie = this.mstatus & 0x8;
+        this.mstatus = val;
+        if (!oldMie && (val & 0x8) && this.onMieEnabled) this.onMieEnabled();
+        break;
+      }
       case 0x304: this.mie      = val; break;
       case 0x305: this.mtvec    = val; break;
       case 0x340: this.mscratch = val; break;
@@ -414,6 +440,7 @@ export class RiscVCore {
     if (this.pendingInterrupt !== null && (this.mstatus & 0x8)) {
       const cause   = this.pendingInterrupt;
       this.pendingInterrupt = null;
+      this._resValid = false;  // Clear reservation on trap
       const mieOld  = (this.mstatus >> 3) & 1;          // current MIE
       this.mstatus  = (this.mstatus & ~0x88)             // clear MPIE (bit7) and MIE (bit3)
                     | (mieOld << 7);                     // MPIE = old MIE
@@ -598,6 +625,92 @@ export class RiscVCore {
       case 0x0f:
         break;
 
+      // ATOMIC (RV32A) — opcode 0x2F
+      case 0x2F: {
+        if (funct3 === 2) {  // .W (word) operations
+          const funct5 = funct7 >> 2;
+          const addr = this.reg(rs1) >>> 0;
+          switch (funct5) {
+            case 0x02: { // LR.W — Load-Reserved
+              const val = this.readWord(addr) | 0;
+              this.setReg(rd, val);
+              this._resAddr  = addr;
+              this._resValid = true;
+              break;
+            }
+            case 0x03: { // SC.W — Store-Conditional
+              if (this._resValid && this._resAddr === addr) {
+                this.writeWord(addr, this.reg(rs2));
+                this.setReg(rd, 0);  // 0 = success
+              } else {
+                this.setReg(rd, 1);  // 1 = failure
+              }
+              this._resValid = false;
+              break;
+            }
+            case 0x01: { // AMOSWAP.W
+              const old = this.readWord(addr) | 0;
+              this.writeWord(addr, this.reg(rs2));
+              this.setReg(rd, old);
+              break;
+            }
+            case 0x00: { // AMOADD.W
+              const old = this.readWord(addr) | 0;
+              this.writeWord(addr, (old + this.reg(rs2)) | 0);
+              this.setReg(rd, old);
+              break;
+            }
+            case 0x04: { // AMOXOR.W
+              const old = this.readWord(addr) | 0;
+              this.writeWord(addr, (old ^ this.reg(rs2)) | 0);
+              this.setReg(rd, old);
+              break;
+            }
+            case 0x0C: { // AMOAND.W
+              const old = this.readWord(addr) | 0;
+              this.writeWord(addr, (old & this.reg(rs2)) | 0);
+              this.setReg(rd, old);
+              break;
+            }
+            case 0x08: { // AMOOR.W
+              const old = this.readWord(addr) | 0;
+              this.writeWord(addr, (old | this.reg(rs2)) | 0);
+              this.setReg(rd, old);
+              break;
+            }
+            case 0x10: { // AMOMIN.W (signed)
+              const old = this.readWord(addr) | 0;
+              const b   = this.reg(rs2);
+              this.writeWord(addr, old < b ? old : b);
+              this.setReg(rd, old);
+              break;
+            }
+            case 0x14: { // AMOMAX.W (signed)
+              const old = this.readWord(addr) | 0;
+              const b   = this.reg(rs2);
+              this.writeWord(addr, old > b ? old : b);
+              this.setReg(rd, old);
+              break;
+            }
+            case 0x18: { // AMOMINU.W (unsigned)
+              const old = this.readWord(addr) | 0;
+              const b   = this.reg(rs2);
+              this.writeWord(addr, (old >>> 0) < (b >>> 0) ? old : b);
+              this.setReg(rd, old);
+              break;
+            }
+            case 0x1C: { // AMOMAXU.W (unsigned)
+              const old = this.readWord(addr) | 0;
+              const b   = this.reg(rs2);
+              this.writeWord(addr, (old >>> 0) > (b >>> 0) ? old : b);
+              this.setReg(rd, old);
+              break;
+            }
+          }
+        }
+        break;
+      }
+
       // SYSTEM — CSR instructions, MRET, ECALL, EBREAK, WFI
       case 0x73: {
         const funct12 = (instr >> 20) & 0xfff;
@@ -605,13 +718,16 @@ export class RiscVCore {
           // Privileged instructions (not CSR)
           if (funct12 === 0x302) {
             // MRET — return from machine trap
+            const oldMie = this.mstatus & 0x8;
             const mpie  = (this.mstatus >> 7) & 1;
             this.mstatus = (this.mstatus & ~0x8) | (mpie << 3);  // MIE = MPIE
             this.mstatus |= (1 << 7);                              // MPIE = 1
             nextPc = this.mepc >>> 0;
+            if (!oldMie && (this.mstatus & 0x8) && this.onMieEnabled) this.onMieEnabled();
           } else if (funct12 === 0x000) {
             // ECALL — synchronous exception (cause=11 for M-mode)
             // Used by FreeRTOS portYIELD to trigger a context switch.
+            this._resValid = false;  // Clear reservation on trap
             const mieOld = (this.mstatus >> 3) & 1;
             this.mstatus = (this.mstatus & ~0x88) | (mieOld << 7);
             this.mepc   = this.pc;   // points at ecall; trap handler adds +4
