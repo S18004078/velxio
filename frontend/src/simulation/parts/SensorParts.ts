@@ -634,20 +634,26 @@ PartSimulationRegistry.register('hc-sr04', {
         simulator.setPinState(echoPin, false); // ECHO LOW initially
 
         let distanceCm = 10; // default distance in cm
-        let echoTimer: ReturnType<typeof setTimeout> | null = null;
 
         const cleanup = simulator.pinManager.onPinChange(trigPin, (_: number, state: boolean) => {
-            if (state) {
-                if (echoTimer !== null) clearTimeout(echoTimer);
-                // echoMs = distanceCm / 17.15 (min 1 ms for setTimeout reliability)
+            if (!state) return; // only react on TRIG HIGH
+            // HC-SR04 timing (at 16 MHz):
+            //  - Sensor processing delay after TRIG: ~600 µs = 9600 cycles
+            //  - Echo duration = distanceCm / 17150 s × 16 000 000 cycles/s
+            //    (17150 cm/s = speed of sound, one-way = round-trip/2)
+            if (typeof simulator.schedulePinChange === 'function') {
+                const now = simulator.getCurrentCycles() as number;
+                const processingCycles = 9600; // ~600 µs sensor overhead
+                const echoCycles = Math.round((distanceCm / 17150) * 16_000_000);
+                simulator.schedulePinChange(echoPin, true,  now + processingCycles);
+                simulator.schedulePinChange(echoPin, false, now + processingCycles + echoCycles);
+                console.log(`[HC-SR04] Scheduled ECHO (${distanceCm} cm, echo=${(echoCycles/16000).toFixed(1)} µs)`);
+            } else {
+                // Fallback: best-effort async (works with delay()-based sketches, not pulseIn)
                 const echoMs = Math.max(1, distanceCm / 17.15);
-                echoTimer = setTimeout(() => {
+                setTimeout(() => {
                     simulator.setPinState(echoPin, true);
-                    console.log(`[HC-SR04] ECHO HIGH (${distanceCm} cm)`);
-                    echoTimer = setTimeout(() => {
-                        simulator.setPinState(echoPin, false);
-                        echoTimer = null;
-                    }, echoMs);
+                    setTimeout(() => { simulator.setPinState(echoPin, false); }, echoMs);
                 }, 1);
             }
         });
@@ -660,7 +666,6 @@ PartSimulationRegistry.register('hc-sr04', {
 
         return () => {
             cleanup();
-            if (echoTimer !== null) clearTimeout(echoTimer);
             unregisterSensorUpdate(componentId);
         };
     },

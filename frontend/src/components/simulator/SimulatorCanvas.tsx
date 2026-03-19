@@ -262,8 +262,8 @@ export const SimulatorCanvas = () => {
       const componentWrapper = target?.closest('[data-component-id]') as HTMLElement | null;
       const boardOverlay = target?.closest('[data-board-overlay]') as HTMLElement | null;
 
-      if (componentWrapper && !runningRef.current) {
-        // ── Single finger on a component: start drag ──
+      if (componentWrapper) {
+        // ── Single finger on a component: track for click/drag ──
         const componentId = componentWrapper.getAttribute('data-component-id');
         if (componentId) {
           const component = componentsRef.current.find((c) => c.id === componentId);
@@ -985,10 +985,7 @@ export const SimulatorCanvas = () => {
           y={component.y}
           isSelected={isSelected}
           onMouseDown={(e) => {
-            // Only handle UI events when simulation is NOT running
-            if (!running) {
-              handleComponentMouseDown(component.id, e);
-            }
+            handleComponentMouseDown(component.id, e);
           }}
           onDoubleClick={(e) => {
             // Only handle UI events when simulation is NOT running

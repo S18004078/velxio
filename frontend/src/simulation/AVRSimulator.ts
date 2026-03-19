@@ -152,6 +152,9 @@ export class AVRSimulator {
   /** 'uno' for ATmega328P boards (Uno, Nano); 'mega' for ATmega2560; 'tiny85' for ATtiny85 */
   private boardVariant: 'uno' | 'mega' | 'tiny85';
 
+  /** Cycle-accurate pin change queue — used by timing-sensitive peripherals (e.g. DHT22). */
+  private scheduledPinChanges: Array<{ cycle: number; pin: number; state: boolean }> = [];
+
   /** Serial output buffer — subscribers receive each byte or line */
   public onSerialData: ((char: string) => void) | null = null;
   /** Fires whenever the sketch changes Serial baud rate (Serial.begin) */
@@ -307,6 +310,37 @@ export class AVRSimulator {
   }
 
   /**
+   * Returns the current CPU cycle count.
+   * Used by timing-sensitive peripherals to schedule future pin changes.
+   */
+  getCurrentCycles(): number {
+    return this.cpu?.cycles ?? 0;
+  }
+
+  /**
+   * Schedule a pin state change at a specific future CPU cycle count.
+   * The change fires between AVR instructions, enabling cycle-accurate protocol simulation.
+   * Used by DHT22 and other timing-sensitive single-wire peripherals.
+   */
+  schedulePinChange(pin: number, state: boolean, atCycle: number): void {
+    // Callers are expected to push entries in ascending cycle order.
+    // Insert at the correct position to maintain sort (linear scan from end, O(1) for ordered pushes).
+    let i = this.scheduledPinChanges.length;
+    while (i > 0 && this.scheduledPinChanges[i - 1].cycle > atCycle) i--;
+    this.scheduledPinChanges.splice(i, 0, { cycle: atCycle, pin, state });
+  }
+
+  /** Flush all scheduled pin changes whose target cycle has been reached. */
+  private flushScheduledPinChanges(): void {
+    if (this.scheduledPinChanges.length === 0 || !this.cpu) return;
+    const now = this.cpu.cycles;
+    while (this.scheduledPinChanges.length > 0 && this.scheduledPinChanges[0].cycle <= now) {
+      const { pin, state } = this.scheduledPinChanges.shift()!;
+      this.setPinState(pin, state);
+    }
+  }
+
+  /**
    * Fire onPinChangeWithTime for every bit that differs between newVal and oldVal.
    * @param pinMap  Optional explicit per-bit Arduino pin numbers (Mega).
    * @param offset  Legacy pin offset (Uno/Nano): PORTB→8, PORTC→14, PORTD→0.
@@ -444,6 +478,7 @@ export class AVRSimulator {
         for (let i = 0; i < cyclesPerFrame; i++) {
           avrInstruction(this.cpu);  // Execute the AVR instruction
           this.cpu.tick();            // Update peripheral timers and cycles
+          if (this.scheduledPinChanges.length > 0) this.flushScheduledPinChanges();
         }
 
         // Poll PWM registers every frame
@@ -476,6 +511,7 @@ export class AVRSimulator {
       cancelAnimationFrame(this.animationFrame);
       this.animationFrame = null;
     }
+    this.scheduledPinChanges = [];
 
     console.log('AVR simulation stopped');
   }

@@ -384,31 +384,68 @@ function buildDHT22Payload(element: HTMLElement): Uint8Array {
 }
 
 /**
- * Drive 40 bits on the DATA pin as fast as synchronous setPinState allows.
- * Each bit produces: LOW → then HIGH if bit=1, LOW if bit=0.
- * This saturates the timing but ensures the pin is toggled correctly.
+ * Schedule the full DHT22 waveform on DATA using cycle-accurate pin changes.
+ *
+ * DHT22 protocol (after MCU releases DATA HIGH):
+ *  - 80 µs LOW  → 80 µs HIGH  (response preamble)
+ *  - 40 bits, each: 50 µs LOW + (26 µs HIGH = '0', 70 µs HIGH = '1')
+ *  - Line released HIGH after last bit
+ *
+ * At 16 MHz: 1 µs = 16 cycles
+ *  - 80 µs = 1280 cycles, 50 µs = 800 cycles, 26 µs = 416 cycles, 70 µs = 1120 cycles
  */
-function driveDHT22Response(simulator: any, pin: number, element: HTMLElement): void {
+function scheduleDHT22Response(simulator: any, pin: number, element: HTMLElement): void {
+  if (typeof simulator.schedulePinChange !== 'function') {
+    // Fallback: synchronous drive (legacy / non-AVR simulators)
+    const payload = buildDHT22Payload(element);
+    simulator.setPinState(pin, false);
+    simulator.setPinState(pin, true);
+    for (const byte of payload) {
+      for (let b = 7; b >= 0; b--) {
+        const bit = (byte >> b) & 1;
+        simulator.setPinState(pin, false);
+        simulator.setPinState(pin, !!bit);
+      }
+    }
+    simulator.setPinState(pin, true);
+    return;
+  }
+
   const payload = buildDHT22Payload(element);
-  // Response preamble: drive LOW (response start)
-  simulator.setPinState(pin, false);
-  // Then HIGH (ready)
-  simulator.setPinState(pin, true);
-  // Transmit 40 bits MSB first
+  const now = simulator.getCurrentCycles() as number;
+
+  // Timing constants at 16 MHz (cycles per µs = 16)
+  const LOW80  = 1280; // 80 µs LOW preamble
+  const HIGH80 = 1280; // 80 µs HIGH preamble
+  const LOW50  =  800; // 50 µs LOW marker before each bit
+  const HIGH0  =  416; // 26 µs HIGH → bit '0'
+  const HIGH1  = 1120; // 70 µs HIGH → bit '1'
+
+  let t = now;
+
+  // Preamble: 80 µs LOW then 80 µs HIGH
+  t += LOW80;  simulator.schedulePinChange(pin, false, t);
+  t += HIGH80; simulator.schedulePinChange(pin, true,  t);
+
+  // 40 data bits, MSB first
   for (const byte of payload) {
     for (let b = 7; b >= 0; b--) {
       const bit = (byte >> b) & 1;
-      simulator.setPinState(pin, false);  // 50 µs LOW marker
-      simulator.setPinState(pin, !!bit);  // HIGH duration encodes 0 or 1
+      t += LOW50;          simulator.schedulePinChange(pin, false, t);
+      t += bit ? HIGH1 : HIGH0;
+                           simulator.schedulePinChange(pin, true,  t);
     }
   }
-  // Line idle HIGH
-  simulator.setPinState(pin, true);
+
+  // Release line HIGH (it already is, but explicit for clarity)
+  t += LOW50; simulator.schedulePinChange(pin, false, t);
+  t += HIGH0; simulator.schedulePinChange(pin, true,  t);
 }
 
 PartSimulationRegistry.register('dht22', {
   attachEvents: (element, simulator, getPin, componentId) => {
-    const pin = getPin('DATA');
+    // wokwi-dht22 element uses 'SDA' as the data pin name (not 'DATA')
+    const pin = getPin('SDA') ?? getPin('DATA');
     if (pin === null) return () => {};
 
     let wasLow = false;
@@ -424,7 +461,7 @@ PartSimulationRegistry.register('dht22', {
         if (wasLow) {
           // MCU released DATA HIGH — begin DHT22 response
           wasLow = false;
-          driveDHT22Response(simulator, pin, element);
+          scheduleDHT22Response(simulator, pin, element);
         }
       },
     );
