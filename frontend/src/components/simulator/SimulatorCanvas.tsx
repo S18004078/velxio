@@ -3,6 +3,8 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { ESP32_ADC_PIN_MAP } from '../components-wokwi/Esp32Element';
 import { ComponentPickerModal } from '../ComponentPickerModal';
 import { ComponentPropertyDialog } from './ComponentPropertyDialog';
+import { SensorControlPanel } from './SensorControlPanel';
+import { SENSOR_CONTROLS } from '../../simulation/sensorControlConfig';
 import { DynamicComponent, createComponentFromMetadata } from '../DynamicComponent';
 import { ComponentRegistry } from '../../services/ComponentRegistry';
 import { PinSelector } from './PinSelector';
@@ -93,6 +95,10 @@ export const SimulatorCanvas = () => {
   const [showPropertyDialog, setShowPropertyDialog] = useState(false);
   const [propertyDialogComponentId, setPropertyDialogComponentId] = useState<string | null>(null);
   const [propertyDialogPosition, setPropertyDialogPosition] = useState({ x: 0, y: 0 });
+
+  // Sensor control panel (shown instead of property dialog for sensor components during simulation)
+  const [sensorControlComponentId, setSensorControlComponentId] = useState<string | null>(null);
+  const [sensorControlMetadataId, setSensorControlMetadataId] = useState<string | null>(null);
 
   // Click vs drag detection
   const [clickStartTime, setClickStartTime] = useState<number>(0);
@@ -389,15 +395,20 @@ export const SimulatorCanvas = () => {
         const dy = changed ? changed.clientY - touchClickStartPosRef.current.y : 0;
         const dist = Math.sqrt(dx * dx + dy * dy);
 
-        // Short tap with minimal movement → open property dialog
+        // Short tap with minimal movement → open property dialog or sensor panel
         if (dist < 5 && elapsed < 300 && touchDraggedComponentIdRef.current !== '__board__') {
           const component = componentsRef.current.find(
             (c) => c.id === touchDraggedComponentIdRef.current
           );
           if (component) {
-            setPropertyDialogComponentId(touchDraggedComponentIdRef.current);
-            setPropertyDialogPosition({ x: component.x, y: component.y });
-            setShowPropertyDialog(true);
+            if (runningRef.current && SENSOR_CONTROLS[component.metadataId] !== undefined) {
+              setSensorControlComponentId(touchDraggedComponentIdRef.current);
+              setSensorControlMetadataId(component.metadataId);
+            } else {
+              setPropertyDialogComponentId(touchDraggedComponentIdRef.current);
+              setPropertyDialogPosition({ x: component.x, y: component.y });
+              setShowPropertyDialog(true);
+            }
           }
         }
 
@@ -764,9 +775,15 @@ export const SimulatorCanvas = () => {
         } else if (draggedComponentId !== '__board__') {
           const component = components.find((c) => c.id === draggedComponentId);
           if (component) {
-            setPropertyDialogComponentId(draggedComponentId);
-            setPropertyDialogPosition({ x: component.x, y: component.y });
-            setShowPropertyDialog(true);
+            // During simulation: sensor components show the SensorControlPanel
+            if (running && SENSOR_CONTROLS[component.metadataId] !== undefined) {
+              setSensorControlComponentId(draggedComponentId);
+              setSensorControlMetadataId(component.metadataId);
+            } else {
+              setPropertyDialogComponentId(draggedComponentId);
+              setPropertyDialogPosition({ x: component.x, y: component.y });
+              setShowPropertyDialog(true);
+            }
           }
         }
       }
@@ -1152,6 +1169,22 @@ export const SimulatorCanvas = () => {
               : 'default',
           }}
         >
+          {/* Sensor Control Panel — shown when a sensor component is clicked during simulation */}
+          {sensorControlComponentId && sensorControlMetadataId && (() => {
+            const meta = registry.getById(sensorControlMetadataId);
+            return (
+              <SensorControlPanel
+                componentId={sensorControlComponentId}
+                metadataId={sensorControlMetadataId}
+                sensorName={meta?.name ?? sensorControlMetadataId}
+                onClose={() => {
+                  setSensorControlComponentId(null);
+                  setSensorControlMetadataId(null);
+                }}
+              />
+            );
+          })()}
+
           {/* Infinite world — pan+zoom applied here */}
           <div
             className="canvas-world"

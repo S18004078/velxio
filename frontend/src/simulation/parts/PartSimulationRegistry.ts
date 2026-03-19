@@ -20,16 +20,18 @@ export interface PartSimulationLogic {
     /**
      * Called when the simulation starts to attach events or setup periodic tasks.
      * Useful for input components (buttons, potentiometers) or complex components (servos).
-     * 
+     *
      * @param element The DOM element of the wokwi component
      * @param avrSimulator The running simulator instance
      * @param getArduinoPinHelper Function to find what Arduino pin is connected to a specific component pin
+     * @param componentId The unique ID of this component instance (used by SensorUpdateRegistry)
      * @returns A cleanup function to remove event listeners when simulation stops
      */
     attachEvents?: (
         element: HTMLElement,
         simulator: AnySimulator,
-        getArduinoPinHelper: (componentPinName: string) => number | null
+        getArduinoPinHelper: (componentPinName: string) => number | null,
+        componentId: string
     ) => () => void;
 }
 

@@ -214,7 +214,7 @@ export const DynamicComponent: React.FC<DynamicComponentProps> = ({
         return null;
       };
 
-      cleanupSimulationEvents = logic.attachEvents(el, simulator, getArduinoPin);
+      cleanupSimulationEvents = logic.attachEvents(el, simulator, getArduinoPin, id);
     }
 
     return () => {

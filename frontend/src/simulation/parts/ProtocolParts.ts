@@ -21,6 +21,7 @@
 import { PartSimulationRegistry } from './PartSimulationRegistry';
 import { VirtualDS1307, VirtualBMP280, VirtualDS3231, VirtualPCF8574 } from '../I2CBusManager';
 import type { I2CDevice } from '../I2CBusManager';
+import { registerSensorUpdate, unregisterSensorUpdate } from '../SensorUpdateRegistry';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -310,7 +311,7 @@ class VirtualMPU6050 implements I2CDevice {
 }
 
 PartSimulationRegistry.register('mpu6050', {
-  attachEvents: (element, simulator, _getPin) => {
+  attachEvents: (element, simulator, _getPin, componentId) => {
     const sim  = simulator as any;
     if (typeof sim.addI2CDevice !== 'function') return () => {};
     const el   = element as any;
@@ -318,7 +319,28 @@ PartSimulationRegistry.register('mpu6050', {
     const addr = (el.ad0 === true || el.ad0 === 'true') ? 0x69 : 0x68;
     const device = new VirtualMPU6050(addr);
     sim.addI2CDevice(device);
-    return () => removeI2CDevice(sim, device.address);
+
+    // Helper: write a signed 16-bit value to two consecutive registers (H, L)
+    const writeI16 = (regH: number, raw: number) => {
+      const v = Math.max(-32768, Math.min(32767, Math.round(raw))) & 0xFFFF;
+      device.registers[regH]     = (v >> 8) & 0xFF;
+      device.registers[regH + 1] =  v       & 0xFF;
+    };
+
+    registerSensorUpdate(componentId, (values) => {
+      if ('accelX' in values) writeI16(0x3B, (values.accelX as number) * 16384);
+      if ('accelY' in values) writeI16(0x3D, (values.accelY as number) * 16384);
+      if ('accelZ' in values) writeI16(0x3F, (values.accelZ as number) * 16384);
+      if ('gyroX'  in values) writeI16(0x43, (values.gyroX  as number) * 131);
+      if ('gyroY'  in values) writeI16(0x45, (values.gyroY  as number) * 131);
+      if ('gyroZ'  in values) writeI16(0x47, (values.gyroZ  as number) * 131);
+      if ('temp'   in values) writeI16(0x41, ((values.temp as number) - 36.53) * 340);
+    });
+
+    return () => {
+      removeI2CDevice(sim, device.address);
+      unregisterSensorUpdate(componentId);
+    };
   },
 });
 
@@ -385,7 +407,7 @@ function driveDHT22Response(simulator: any, pin: number, element: HTMLElement): 
 }
 
 PartSimulationRegistry.register('dht22', {
-  attachEvents: (element, simulator, getPin) => {
+  attachEvents: (element, simulator, getPin, componentId) => {
     const pin = getPin('DATA');
     if (pin === null) return () => {};
 
@@ -410,9 +432,17 @@ PartSimulationRegistry.register('dht22', {
     // Idle state: DATA HIGH (pulled up)
     simulator.setPinState(pin, true);
 
+    // SensorControlPanel: update temperature / humidity on the element
+    registerSensorUpdate(componentId, (values) => {
+      const el = element as any;
+      if ('temperature' in values) el.temperature = values.temperature as number;
+      if ('humidity'    in values) el.humidity    = values.humidity    as number;
+    });
+
     return () => {
       unsub();
       simulator.setPinState(pin, true);
+      unregisterSensorUpdate(componentId);
     };
   },
 });
@@ -768,7 +798,7 @@ PartSimulationRegistry.register('microsd-card', {
  * compensated readings.
  */
 PartSimulationRegistry.register('bmp280', {
-  attachEvents: (element, simulator, _getPin) => {
+  attachEvents: (element, simulator, _getPin, componentId) => {
     const sim = simulator as any;
     if (typeof sim.addI2CDevice !== 'function') return () => {};
 
@@ -780,7 +810,17 @@ PartSimulationRegistry.register('bmp280', {
     if (el.pressure    !== undefined) dev.pressureHPa   = parseFloat(el.pressure);
 
     sim.addI2CDevice(dev);
-    return () => removeI2CDevice(sim, dev.address);
+
+    // SensorControlPanel: update temperature / pressure in real-time
+    registerSensorUpdate(componentId, (values) => {
+      if ('temperature' in values) dev.temperatureC = values.temperature as number;
+      if ('pressure'    in values) dev.pressureHPa  = values.pressure    as number;
+    });
+
+    return () => {
+      removeI2CDevice(sim, dev.address);
+      unregisterSensorUpdate(componentId);
+    };
   },
 });
 

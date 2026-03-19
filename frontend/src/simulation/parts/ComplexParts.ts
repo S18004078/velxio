@@ -2,6 +2,7 @@ import { PartSimulationRegistry } from './PartSimulationRegistry';
 import type { AnySimulator } from './PartSimulationRegistry';
 import { RP2040Simulator } from '../RP2040Simulator';
 import { getADC, setAdcVoltage } from './partUtils';
+import { registerSensorUpdate, unregisterSensorUpdate } from '../SensorUpdateRegistry';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -131,14 +132,14 @@ PartSimulationRegistry.register('slide-potentiometer', {
  * returns a valid value. Users can modify the element's `value` attribute.
  */
 PartSimulationRegistry.register('photoresistor-sensor', {
-    attachEvents: (element, avrSimulator, getArduinoPinHelper) => {
+    attachEvents: (element, avrSimulator, getArduinoPinHelper, componentId) => {
         const pinAO = getArduinoPinHelper('AO') ?? getArduinoPinHelper('A0');
         const pinDO = getArduinoPinHelper('DO') ?? getArduinoPinHelper('D0');
         const pinManager = (avrSimulator as any).pinManager;
 
         const unsubscribers: (() => void)[] = [];
 
-        // Inject initial mid-range voltage (simulate moderate light)
+        // Inject initial mid-range voltage (simulate moderate light, ~500 lux)
         if (pinAO !== null) {
             setAdcVoltage(avrSimulator, pinAO, 2.5);
         }
@@ -161,7 +162,17 @@ PartSimulationRegistry.register('photoresistor-sensor', {
             }));
         }
 
-        return () => unsubscribers.forEach(u => u());
+        // SensorControlPanel: lux 0–1000 → volts 0–5
+        registerSensorUpdate(componentId, (values) => {
+            if ('lux' in values && pinAO !== null) {
+                setAdcVoltage(avrSimulator, pinAO, ((values.lux as number) / 1000) * 5.0);
+            }
+        });
+
+        return () => {
+            unsubscribers.forEach(u => u());
+            unregisterSensorUpdate(componentId);
+        };
     },
 });
 
@@ -172,7 +183,7 @@ PartSimulationRegistry.register('photoresistor-sensor', {
  * Wokwi pins: VRX (X axis), VRY (Y axis), SW (button)
  */
 PartSimulationRegistry.register('analog-joystick', {
-    attachEvents: (element, avrSimulator, getArduinoPinHelper) => {
+    attachEvents: (element, avrSimulator, getArduinoPinHelper, componentId) => {
         const pinX   = getArduinoPinHelper('VRX') ?? getArduinoPinHelper('XOUT');
         const pinY   = getArduinoPinHelper('VRY') ?? getArduinoPinHelper('YOUT');
         const pinSW  = getArduinoPinHelper('SW');
@@ -208,11 +219,22 @@ PartSimulationRegistry.register('analog-joystick', {
         element.addEventListener('button-press', onPress);
         element.addEventListener('button-release', onRelease);
 
+        // SensorControlPanel: xAxis/yAxis -512..512 → voltage 0–5V (center = 2.5V)
+        registerSensorUpdate(componentId, (values) => {
+            if ('xAxis' in values && pinX !== null) {
+                setAdcVoltage(avrSimulator, pinX, ((values.xAxis as number + 512) / 1023) * 5.0);
+            }
+            if ('yAxis' in values && pinY !== null) {
+                setAdcVoltage(avrSimulator, pinY, ((values.yAxis as number + 512) / 1023) * 5.0);
+            }
+        });
+
         return () => {
             element.removeEventListener('input', onMove);
             element.removeEventListener('joystick-move', onMove);
             element.removeEventListener('button-press', onPress);
             element.removeEventListener('button-release', onRelease);
+            unregisterSensorUpdate(componentId);
         };
     },
 });
