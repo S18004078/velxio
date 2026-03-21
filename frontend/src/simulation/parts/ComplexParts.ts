@@ -274,45 +274,39 @@ PartSimulationRegistry.register('servo', {
         const MAX_PULSE_US = 2400;
         const CPU_HZ = 16_000_000;
 
-        // ── RP2040 path: read PWM CC/TOP registers directly ────────────────
-        // Arduino-Pico Servo library uses analogWriteFreq(50) + analogWriteRange(20000)
-        // Each PWM slice CC value / (TOP+1) * 20000 gives pulse width in µs.
-        // GPIO n → slice = n>>1, channel A (even) or B (odd) of `pwm.channels[slice].cc`.
+        // ── RP2040 path: measure GPIO pulse timing via onPinChangeWithTime ───────
+        // Arduino-Pico Servo library uses PIO (not hardware PWM) — PIO toggles GPIO
+        // directly, which fires gpio.addListener → onPinChangeWithTime with the
+        // accurate simulation time from SimulationClock.nanosCounter.
         if (avrSimulator instanceof RP2040Simulator && pinSIG !== null) {
-            const rp2040 = (avrSimulator as unknown as Record<string, unknown>).rp2040 as Record<string, unknown> | null;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const pwmChannels = (rp2040 as any)?.pwm?.channels as Array<{ cc: number; top: number }> | undefined;
-            if (pwmChannels) {
-                const slice = pinSIG >> 1;
-                const isChannelB = (pinSIG & 1) === 1;
-                let lastPulseUs = -1;
-                let rafId: number | null = null;
+            console.log(`[Servo RP2040] attached, pinSIG=${pinSIG}`);
+            let riseTimeMs = -1;
+            let logCount = 0;
 
-                const pollPWM = () => {
-                    if (avrSimulator.isRunning()) {
-                        const ch = pwmChannels[slice];
-                        if (ch && ch.top > 0) {
-                            const ccRaw = ch.cc;
-                            const ccVal = isChannelB ? (ccRaw >>> 16) & 0xffff : ccRaw & 0xffff;
-                            // Servo period is 20ms (50 Hz via analogWriteFreq(50))
-                            const pulseUs = Math.round((ccVal / (ch.top + 1)) * 20_000);
-                            if (pulseUs !== lastPulseUs) {
-                                lastPulseUs = pulseUs;
-                                if (pulseUs >= MIN_PULSE_US && pulseUs <= MAX_PULSE_US) {
-                                    const angle = Math.round(
-                                        ((pulseUs - MIN_PULSE_US) / (MAX_PULSE_US - MIN_PULSE_US)) * 180
-                                    );
-                                    el.angle = angle;
-                                }
-                            }
-                        }
+            avrSimulator.onPinChangeWithTime = (pin, state, timeMs) => {
+                if (pin !== pinSIG) return;
+                if (logCount < 10) {
+                    logCount++;
+                    console.log(`[Servo RP2040] pin=${pin} state=${state} timeMs=${timeMs.toFixed(3)}`);
+                }
+                if (state) {
+                    riseTimeMs = timeMs;
+                } else if (riseTimeMs >= 0) {
+                    const pulseUs = (timeMs - riseTimeMs) * 1000;
+                    riseTimeMs = -1;
+                    if (logCount <= 12) {
+                        console.log(`[Servo RP2040] pulseUs=${pulseUs.toFixed(1)}`);
                     }
-                    rafId = requestAnimationFrame(pollPWM);
-                };
+                    if (pulseUs >= MIN_PULSE_US && pulseUs <= MAX_PULSE_US) {
+                        const angle = Math.round(
+                            ((pulseUs - MIN_PULSE_US) / (MAX_PULSE_US - MIN_PULSE_US)) * 180
+                        );
+                        el.angle = angle;
+                    }
+                }
+            };
 
-                rafId = requestAnimationFrame(pollPWM);
-                return () => { if (rafId !== null) cancelAnimationFrame(rafId); };
-            }
+            return () => { avrSimulator.onPinChangeWithTime = null; };
         }
 
         // ── AVR primary: cycle-accurate pulse width measurement ────────────
