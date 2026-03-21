@@ -3467,16 +3467,16 @@ void loop() {
   {
     id: 'pico-hcsr04',
     title: 'Pico: HC-SR04 Ultrasonic Distance',
-    description: 'Measure distance with an HC-SR04 sensor on the Raspberry Pi Pico. TRIG on GP9, ECHO on GP10.',
+    description: 'Measure distance with an HC-SR04 sensor on the Raspberry Pi Pico. TRIG on D5 (GP17), ECHO on D6 (GP18).',
     category: 'sensors',
     difficulty: 'beginner',
     boardType: 'raspberry-pi-pico',
     boardFilter: 'raspberry-pi-pico',
     code: `// Raspberry Pi Pico — HC-SR04 Ultrasonic Distance Sensor
-// Wiring: TRIG → GP9  |  ECHO → GP10  |  VCC → 3.3V  |  GND → GND
+// Wiring: TRIG → D5(GP17)  |  ECHO → D6(GP18)  |  VCC → 3.3V  |  GND → GND
 
-#define TRIG_PIN 9   // GPIO 9
-#define ECHO_PIN 10  // GPIO 10
+#define TRIG_PIN 17  // GPIO 17 (D5)
+#define ECHO_PIN 18  // GPIO 18 (D6)
 
 void setup() {
   Serial.begin(115200);
@@ -3510,22 +3510,22 @@ void loop() {
     wires: [
       { id: 'pcs-vcc',  start: { componentId: 'nano-rp2040', pinName: '3.3V'  }, end: { componentId: 'pico-sr1', pinName: 'VCC'  }, color: '#ff4444' },
       { id: 'pcs-gnd',  start: { componentId: 'nano-rp2040', pinName: 'GND.1' }, end: { componentId: 'pico-sr1', pinName: 'GND'  }, color: '#000000' },
-      { id: 'pcs-trig', start: { componentId: 'nano-rp2040', pinName: 'GP9'   }, end: { componentId: 'pico-sr1', pinName: 'TRIG' }, color: '#ff8800' },
-      { id: 'pcs-echo', start: { componentId: 'nano-rp2040', pinName: 'GP10'  }, end: { componentId: 'pico-sr1', pinName: 'ECHO' }, color: '#22cc22' },
+      { id: 'pcs-trig', start: { componentId: 'nano-rp2040', pinName: 'D5'    }, end: { componentId: 'pico-sr1', pinName: 'TRIG' }, color: '#ff8800' },
+      { id: 'pcs-echo', start: { componentId: 'nano-rp2040', pinName: 'D6'   }, end: { componentId: 'pico-sr1', pinName: 'ECHO' }, color: '#22cc22' },
     ],
   },
   {
     id: 'pico-pir',
     title: 'Pico: PIR Motion Detector',
-    description: 'Detect movement with a PIR sensor on GP14. The built-in LED (GP25) activates when motion is detected.',
+    description: 'Detect movement with a PIR sensor on D4 (GP16). The built-in LED (GP25) activates when motion is detected.',
     category: 'sensors',
     difficulty: 'beginner',
     boardType: 'raspberry-pi-pico',
     boardFilter: 'raspberry-pi-pico',
     code: `// Raspberry Pi Pico — PIR Motion Sensor
-// Wiring: OUT → GP14  |  VCC → 3.3V  |  GND → GND
+// Wiring: OUT → D4(GP16)  |  VCC → 3.3V  |  GND → GND
 
-#define PIR_PIN 14  // GPIO 14
+#define PIR_PIN 16  // GPIO 16 (D4)
 #define LED_PIN 25  // on-board LED (LED_BUILTIN on Pico)
 
 bool prevMotion = false;
@@ -3557,24 +3557,24 @@ void loop() {
     wires: [
       { id: 'pp-vcc', start: { componentId: 'nano-rp2040', pinName: '3.3V'  }, end: { componentId: 'pico-pir1', pinName: 'VCC' }, color: '#ff4444' },
       { id: 'pp-gnd', start: { componentId: 'nano-rp2040', pinName: 'GND.1' }, end: { componentId: 'pico-pir1', pinName: 'GND' }, color: '#000000' },
-      { id: 'pp-out', start: { componentId: 'nano-rp2040', pinName: 'GP14'  }, end: { componentId: 'pico-pir1', pinName: 'OUT' }, color: '#ffcc00' },
+      { id: 'pp-out', start: { componentId: 'nano-rp2040', pinName: 'D4'    }, end: { componentId: 'pico-pir1', pinName: 'OUT' }, color: '#ffcc00' },
     ],
   },
   {
     id: 'pico-servo',
     title: 'Pico: Servo Motor Sweep',
-    description: 'Sweep a servo motor from 0° to 180° and back on the Raspberry Pi Pico using GP15 (PWM).',
+    description: 'Sweep a servo motor from 0° to 180° and back on the Raspberry Pi Pico using D3 / GP15 (PWM).',
     category: 'robotics',
     difficulty: 'beginner',
     boardType: 'raspberry-pi-pico',
     boardFilter: 'raspberry-pi-pico',
     code: `// Raspberry Pi Pico — Servo Motor Sweep
-// Wiring: PWM → GP15  |  V+ → 3.3V  |  GND → GND
+// Wiring: PWM → D3(GP15)  |  V+ → 3.3V  |  GND → GND
 // Uses built-in Servo library
 
 #include <Servo.h>
 
-#define SERVO_PIN 15  // GPIO 15
+#define SERVO_PIN 15  // GPIO 15 (D3)
 
 Servo myServo;
 
@@ -3596,7 +3596,7 @@ void loop() {
     wires: [
       { id: 'psv-vcc', start: { componentId: 'nano-rp2040', pinName: '3.3V'  }, end: { componentId: 'pico-sv1', pinName: 'V+' }, color: '#ff4444' },
       { id: 'psv-gnd', start: { componentId: 'nano-rp2040', pinName: 'GND.1' }, end: { componentId: 'pico-sv1', pinName: 'GND' }, color: '#000000' },
-      { id: 'psv-pwm', start: { componentId: 'nano-rp2040', pinName: 'GP15'  }, end: { componentId: 'pico-sv1', pinName: 'PWM' }, color: '#ff8800' },
+      { id: 'psv-pwm', start: { componentId: 'nano-rp2040', pinName: 'D3'    }, end: { componentId: 'pico-sv1', pinName: 'PWM' }, color: '#ff8800' },
     ],
   },
   {
@@ -3649,18 +3649,18 @@ void loop() {
   {
     id: 'pico-joystick',
     title: 'Pico: Analog Joystick',
-    description: 'Read X/Y axes and button press from an analog joystick. VERT on A0 (GP26), HORZ on A1 (GP27), SEL button on GP14.',
+    description: 'Read X/Y axes and button press from an analog joystick. VERT on A0 (GP26), HORZ on A1 (GP27), SEL button on D4 (GP16).',
     category: 'sensors',
     difficulty: 'beginner',
     boardType: 'raspberry-pi-pico',
     boardFilter: 'raspberry-pi-pico',
     code: `// Raspberry Pi Pico — Analog Joystick
-// Wiring: VERT → A0(GP26)  |  HORZ → A1(GP27)  |  SEL → GP14
+// Wiring: VERT → A0(GP26)  |  HORZ → A1(GP27)  |  SEL → D4(GP16)
 //         VCC → 3.3V  |  GND → GND
 
 #define JOY_VERT A0   // GP26
 #define JOY_HORZ A1   // GP27
-#define JOY_BTN  14   // GP14
+#define JOY_BTN  16   // GP16 (D4)
 
 void setup() {
   Serial.begin(115200);
@@ -3691,7 +3691,7 @@ void loop() {
       { id: 'pj-gnd',  start: { componentId: 'nano-rp2040', pinName: 'GND.1' }, end: { componentId: 'pico-joy1', pinName: 'GND'  }, color: '#000000' },
       { id: 'pj-vert', start: { componentId: 'nano-rp2040', pinName: 'A0'    }, end: { componentId: 'pico-joy1', pinName: 'VERT' }, color: '#22aaff' },
       { id: 'pj-horz', start: { componentId: 'nano-rp2040', pinName: 'A1'    }, end: { componentId: 'pico-joy1', pinName: 'HORZ' }, color: '#22cc44' },
-      { id: 'pj-sel',  start: { componentId: 'nano-rp2040', pinName: 'GP14'  }, end: { componentId: 'pico-joy1', pinName: 'SEL'  }, color: '#aa44ff' },
+      { id: 'pj-sel',  start: { componentId: 'nano-rp2040', pinName: 'D4'    }, end: { componentId: 'pico-joy1', pinName: 'SEL'  }, color: '#aa44ff' },
     ],
   },
 

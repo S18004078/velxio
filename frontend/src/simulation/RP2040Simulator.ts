@@ -232,10 +232,10 @@ export class RP2040Simulator {
         const isHigh = state === GPIOPinState.High;
         this.pinManager.triggerPinChange(pin, isHigh);
         if (this.onPinChangeWithTime && this.rp2040) {
-          // Use clock cycles if available, otherwise 0
+          // IClock interface exposes `nanos` (not `timeUs`)
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const clk = (this.rp2040 as any).clock;
-          const timeMs = clk ? clk.timeUs / 1000 : 0;
+          const timeMs = clk ? (clk.nanos as number) / 1_000_000 : 0;
           this.onPinChangeWithTime(pin, isHigh, timeMs);
         }
       });

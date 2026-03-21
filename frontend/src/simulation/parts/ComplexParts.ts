@@ -274,26 +274,72 @@ PartSimulationRegistry.register('servo', {
         const MAX_PULSE_US = 2400;
         const CPU_HZ = 16_000_000;
 
-        // ── Primary: cycle-accurate pulse width measurement ────────────────
+        // ── RP2040 path: read PWM CC/TOP registers directly ────────────────
+        // Arduino-Pico Servo library uses analogWriteFreq(50) + analogWriteRange(20000)
+        // Each PWM slice CC value / (TOP+1) * 20000 gives pulse width in µs.
+        // GPIO n → slice = n>>1, channel A (even) or B (odd) of `pwm.channels[slice].cc`.
+        if (avrSimulator instanceof RP2040Simulator && pinSIG !== null) {
+            const rp2040 = (avrSimulator as unknown as Record<string, unknown>).rp2040 as Record<string, unknown> | null;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const pwmChannels = (rp2040 as any)?.pwm?.channels as Array<{ cc: number; top: number }> | undefined;
+            if (pwmChannels) {
+                const slice = pinSIG >> 1;
+                const isChannelB = (pinSIG & 1) === 1;
+                let lastPulseUs = -1;
+                let rafId: number | null = null;
+
+                const pollPWM = () => {
+                    if (avrSimulator.isRunning()) {
+                        const ch = pwmChannels[slice];
+                        if (ch && ch.top > 0) {
+                            const ccRaw = ch.cc;
+                            const ccVal = isChannelB ? (ccRaw >>> 16) & 0xffff : ccRaw & 0xffff;
+                            // Servo period is 20ms (50 Hz via analogWriteFreq(50))
+                            const pulseUs = Math.round((ccVal / (ch.top + 1)) * 20_000);
+                            if (pulseUs !== lastPulseUs) {
+                                lastPulseUs = pulseUs;
+                                if (pulseUs >= MIN_PULSE_US && pulseUs <= MAX_PULSE_US) {
+                                    const angle = Math.round(
+                                        ((pulseUs - MIN_PULSE_US) / (MAX_PULSE_US - MIN_PULSE_US)) * 180
+                                    );
+                                    el.angle = angle;
+                                }
+                            }
+                        }
+                    }
+                    rafId = requestAnimationFrame(pollPWM);
+                };
+
+                rafId = requestAnimationFrame(pollPWM);
+                return () => { if (rafId !== null) cancelAnimationFrame(rafId); };
+            }
+        }
+
+        // ── AVR primary: cycle-accurate pulse width measurement ────────────
         if (pinSIG !== null) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const pinManager = (avrSimulator as any).pinManager as import('../PinManager').PinManager | undefined;
             if (pinManager) {
-                let riseTime = -1; // cpu.cycles at last rising edge
+                let riseTime = -1; // cycle count at last rising edge
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const getCycles = () => typeof (avrSimulator as any).getCurrentCycles === 'function'
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    ? (avrSimulator as any).getCurrentCycles() as number
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    : ((avrSimulator as any).cpu?.cycles ?? 0) as number;
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const clockHz = typeof (avrSimulator as any).getClockHz === 'function'
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    ? (avrSimulator as any).getClockHz() as number
+                    : CPU_HZ;
 
                 const unsubscribe = pinManager.onPinChange(pinSIG, (_pin, state) => {
-                    const cpu = (avrSimulator as any).cpu;
-                    if (!cpu) return;
-
                     if (state) {
-                        // Rising edge — record cycle count
-                        riseTime = cpu.cycles;
+                        riseTime = getCycles();
                     } else if (riseTime >= 0) {
-                        // Falling edge — compute pulse width in µs
-                        const pulseCycles = cpu.cycles - riseTime;
-                        const pulseUs = (pulseCycles / CPU_HZ) * 1_000_000;
+                        const pulseCycles = getCycles() - riseTime;
+                        const pulseUs = (pulseCycles / clockHz) * 1_000_000;
                         riseTime = -1;
-
-                        // Only update if pulse is in valid RC servo range
                         if (pulseUs >= MIN_PULSE_US && pulseUs <= MAX_PULSE_US) {
                             const angle = Math.round(
                                 ((pulseUs - MIN_PULSE_US) / (MAX_PULSE_US - MIN_PULSE_US)) * 180
