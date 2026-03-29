@@ -47,15 +47,15 @@ jobs:
 
       # Build avr8js (referenced as file: dep in frontend/package.json)
       - name: Build avr8js
-        run: cd wokwi-libs/avr8js && npm ci && npm run build
+        run: cd wokwi-libs/avr8js && npm install && npm run build
 
       # Build rp2040js (referenced via vite alias to dist/esm)
       - name: Build rp2040js
-        run: cd wokwi-libs/rp2040js && npm ci && npm run build
+        run: cd wokwi-libs/rp2040js && npm install && npm run build
 
       # Build wokwi-elements (referenced as file: dep in frontend/package.json)
       - name: Build wokwi-elements
-        run: cd wokwi-libs/wokwi-elements && npm ci && npm run build
+        run: cd wokwi-libs/wokwi-elements && npm install && npm run build
 
       # Install frontend deps (picks up file: references to avr8js and wokwi-elements)
       - name: Install frontend dependencies
