@@ -400,8 +400,26 @@ class ESPIDFCompiler:
             if not main_content and files:
                 main_content = files[0]['content']
 
-            # Replace Wokwi-GUEST with Velxio-GUEST in sketch
-            main_content = main_content.replace('Wokwi-GUEST', _QEMU_WIFI_SSID)
+            # Auto-fix missing channel argument in WiFi.begin for QEMU compatibility
+            # QEMU's mock WiFi AP is on channel 6, and active scanning hangs the simulator.
+            # Match WiFi.begin(...) without a channel, catching both literals and variables.
+            # 1 arg: WiFi.begin(ssid) -> WiFi.begin(ssid, "", 6)
+            main_content = re.sub(
+                r'WiFi\.begin\s*\(\s*([^,]+?)\s*\)',
+                r'WiFi.begin(\1, "", 6)',
+                main_content
+            )
+            # 2 args: WiFi.begin(ssid, pass) -> WiFi.begin(ssid, pass, 6)
+            # Exclude matching if the second arg is obviously an int channel (which is wrong but possible)
+            # We match if there are exactly two args. We have to be careful with commas.
+            main_content = re.sub(
+                r'WiFi\.begin\s*\(\s*([^,]+?)\s*,\s*([^,]+?)\s*\)',
+                r'WiFi.begin(\1, \2, 6)',
+                main_content
+            )
+            
+            # Since QEMU's AP accepts any SSID (as long as it's on channel 6),
+            # we let the user use Velxio-GUEST or whatever they want.
 
             if self.has_arduino:
                 # Arduino-as-component mode: copy sketch as .cpp
